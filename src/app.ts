@@ -17,6 +17,7 @@ import { decodeSignedPayload } from "./helpers/plans-helpers.js";
 import { BADREQUEST, INTERNAL_SERVER_ERROR, OK } from "./utils/responses.js";
 import { notificationAnnouncementCron, notificationGarbageCollectionCron, startReminderAndUpdateCronJob, updateExpiredSubscriptions } from "./cron-job/update-purchase-cron.js";
 import { initializeFirebase } from "./config/fcm.js";
+ 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
