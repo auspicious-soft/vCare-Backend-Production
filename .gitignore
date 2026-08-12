@@ -141,3 +141,4 @@ vite.config.ts.timestamp-*
 
 # Pem File, Cloud Front Public & Private Pem Files
 keys/
+v-care-prod.pem

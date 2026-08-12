@@ -36,7 +36,7 @@ jobs:
           push: true
           no-cache: true
           pull: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/v-care-backend:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/v-care-backend-live:latest
 
       # Step 7: Setup SSH for EC2
       - name: Setup SSH for EC2
@@ -63,15 +63,15 @@ jobs:
             fi
             
             echo 'Pulling Docker image...'
-            docker pull ${{ secrets.DOCKER_USERNAME }}/v-care-backend:latest || { echo 'Docker pull failed'; exit 1; }
+            docker pull ${{ secrets.DOCKER_USERNAME }}/v-care-backend-live:latest || { echo 'Docker pull failed'; exit 1; }
 
             echo 'Stopping existing container...'
-            docker stop v-care-backend || true 
-            docker rm v-care-backend || true
+            docker stop v-care-backend-live || true 
+            docker rm v-care-backend-live || true
 
             echo 'Running new container...'
             docker run -d \
-              --name v-care-backend \
+              --name v-care-backend-live \
               --network vcare-network \
               -p 8000:8000\
               -e MONGO_URL='${{ secrets.MONGO_URL }}' \
@@ -118,7 +118,7 @@ jobs:
               -e STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
               -e FRONTEND_URL='${{ secrets.FRONTEND_URL }}' \
               -e MODE='${{ secrets.MODE }}' \
-              ${{ secrets.DOCKER_USERNAME }}/v-care-backend:latest || { echo 'Docker run failed'; exit 1; }
+              ${{ secrets.DOCKER_USERNAME }}/v-care-backend-live:latest || { echo 'Docker run failed'; exit 1; }
 
             echo 'Container running successfully'
 
