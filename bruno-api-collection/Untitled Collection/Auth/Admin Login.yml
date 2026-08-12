@@ -1,0 +1,102 @@
+info:
+  name: Admin Login
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{URL}}admin-login"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "ankit@auspicioussoft.in",
+        "password": "12345678"
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const token = res.getBody().data.accessToken
+        console.log(token)
+        bru.setEnvVar("TOKEN_ADMIN", token)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: response
+    request:
+      url: http://localhost:8001/api/admin-login
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "email": "ankit@auspicioussoft.in",
+            "password": "12345678"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: x-powered-by
+          value: Express
+        - name: access-control-allow-origin
+          value: "*"
+        - name: access-control-allow-credentials
+          value: "true"
+        - name: set-cookie
+          value: refreshToken=bda3f2a7-57fa-4cd0-bd90-1cf836d59bb2; Max-Age=2592000; Path=/; Expires=Wed, 20 May 2026 12:15:50 GMT; HttpOnly; SameSite=Strict
+        - name: content-type
+          value: application/json; charset=utf-8
+        - name: content-length
+          value: "940"
+        - name: etag
+          value: W/"3ac-bZNeb1umWY7ZgHcY8mpQA8Lukq0"
+        - name: date
+          value: Mon, 20 Apr 2026 12:15:50 GMT
+        - name: connection
+          value: keep-alive
+        - name: keep-alive
+          value: timeout=5
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Login successful",
+            "data": {
+              "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTNiN2QzZWFkYjM5ZDM3ZWY1N2Y0MyIsInJvbGUiOiJPV05FUiIsImFjY2VzcyI6WyJEQVNIQk9BUkQiLCJGSUxFX1VQTE9BRCIsIlVTRVIiLCJDT1VSU0VfSU5UUk8iLCJDT1VSU0VTIiwiTEVTU09OU19WSURFT1MiLCJET01BSU5TX1RBU0tTIiwiUVVFU1RJT05TIiwiRVhBTVMiLCJGTEFTSF9DQVJEUyIsIkFQUF9TVVBQT1JUIiwiRVhBTV9TVFJBVEVHWSIsIkNFUlRJRklDQVRFU19QRFVTIiwiQU5OT1VOQ0VNRU5UUyIsIk5PVElGSUNBVElPTlMiLCJSQVRJTkdfUkVWSUVXUyJdLCJpYXQiOjE3NzY2ODczNTAsImV4cCI6MTc4MTAwNzM1MH0.sEQ6f2xE5rnc6mEIwYIZ7qVFCa49PEH_n4BXHcYq-ro",
+              "admin": {
+                "id": "6953b7d3eadb39d37ef57f43",
+                "firstname": "Admin",
+                "lastname": "Ankit",
+                "email": "ankit@auspicioussoft.in",
+                "role": "OWNER",
+                "access": [
+                  "DASHBOARD",
+                  "FILE_UPLOAD",
+                  "USER",
+                  "COURSE_INTRO",
+                  "COURSES",
+                  "LESSONS_VIDEOS",
+                  "DOMAINS_TASKS",
+                  "QUESTIONS",
+                  "EXAMS",
+                  "FLASH_CARDS",
+                  "APP_SUPPORT",
+                  "EXAM_STRATEGY",
+                  "CERTIFICATES_PDUS",
+                  "ANNOUNCEMENTS",
+                  "NOTIFICATIONS",
+                  "RATING_REVIEWS"
+                ]
+              }
+            }
+          }

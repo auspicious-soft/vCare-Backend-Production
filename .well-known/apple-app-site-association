@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "B2GHMA2MKV.com.reactnative.vcarepmmentor",
+        "paths": [
+          "/payment-success",
+          "/payment-cancel",
+          "/payment-success*",
+          "/payment-cancel*",
+          "/*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": []
+  }
+}

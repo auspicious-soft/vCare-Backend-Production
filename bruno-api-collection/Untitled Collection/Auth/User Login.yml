@@ -1,0 +1,89 @@
+info:
+  name: User Login
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{URL}}user-login"
+  body:
+    type: json
+    data: |-
+      {
+          "email": "ankit123@yopmail.com",
+          "password": "12345678",
+          "fcmToken": "My-New-FCM"
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const token = res.getBody().data.accessToken
+        console.log(token)
+        bru.setEnvVar("TOKEN_USER", token)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: example
+    request:
+      url: "{{URL}}user-login"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+              "email": "ankit123@yopmail.com",
+              "password": "12345678",
+              "fcmToken": "My-New-FCM"
+          }
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: x-powered-by
+          value: Express
+        - name: access-control-allow-origin
+          value: "*"
+        - name: access-control-allow-credentials
+          value: "true"
+        - name: set-cookie
+          value: refreshToken=b51a8a4e-322b-4b8b-8e1c-bb13224499ce; Max-Age=2592000; Path=/; Expires=Wed, 20 May 2026 12:36:17 GMT; HttpOnly; SameSite=Strict
+        - name: content-type
+          value: application/json; charset=utf-8
+        - name: content-length
+          value: "479"
+        - name: etag
+          value: W/"1df-lCJmCatwuISaar+Hgfcv848pK4M"
+        - name: date
+          value: Mon, 20 Apr 2026 12:36:17 GMT
+        - name: connection
+          value: keep-alive
+        - name: keep-alive
+          value: timeout=5
+      body:
+        type: json
+        data: |-
+          {
+            "success": true,
+            "message": "Login successful",
+            "data": {
+              "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5ZDY0YjExZmUxMGFjOGRhNmI0NzJjOCIsInJvbGUiOiJVU0VSIiwiYWNjZXNzIjpbXSwiaWF0IjoxNzc2Njg4NTc3LCJleHAiOjE3NzkyODA1Nzd9.TdcCrHRwiHrkpnonhbhOWm24WYpXu2tBfZAwMZtJJLY",
+              "refreshToken": "b51a8a4e-322b-4b8b-8e1c-bb13224499ce",
+              "user": {
+                "id": "69d64b11fe10ac8da6b472c8",
+                "firstname": "User",
+                "lastname": "Ankit",
+                "email": "ankit123@yopmail.com",
+                "role": "USER",
+                "image": null,
+                "access": []
+              }
+            }
+          }

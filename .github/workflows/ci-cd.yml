@@ -1,0 +1,137 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+      EC2_URL: ${{ secrets.EC2_URL }}
+      EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Log in to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Step 3: Build and push Docker image to Docker Hub
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          no-cache: true
+          pull: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/v-care-backend:latest
+
+      # Step 7: Setup SSH for EC2
+      - name: Setup SSH for EC2
+        uses: omarhosny206/setup-ssh-for-ec2@v1.0.0
+        with:
+          EC2_SSH_PRIVATE_KEY: $EC2_SSH_PRIVATE_KEY
+          EC2_URL: $EC2_URL
+
+      # Step 8: Deploy to EC2
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_URL << 'ENDSSH'
+            set -e
+
+            # Clean up EC2 instance
+            echo 'Cleaning up EC2 instance...'
+            docker image prune -f || { echo 'Docker image prune failed'; exit 1; }
+
+            # Check if Docker is installed
+            if ! command -v docker &> /dev/null
+            then 
+              sudo apt-get update
+              sudo apt-get install -y docker.io
+            fi
+            
+            echo 'Pulling Docker image...'
+            docker pull ${{ secrets.DOCKER_USERNAME }}/v-care-backend:latest || { echo 'Docker pull failed'; exit 1; }
+
+            echo 'Stopping existing container...'
+            docker stop v-care-backend || true 
+            docker rm v-care-backend || true
+
+            echo 'Running new container...'
+            docker run -d \
+              --name v-care-backend \
+              --network vcare-network \
+              -p 8000:8000\
+              -e MONGO_URL='${{ secrets.MONGO_URL }}' \
+              -e PORT='${{ secrets.PORT }}' \
+              -e REDIS_HOST='${{ secrets.REDIS_HOST }}' \
+              -e REDIS_PORT='${{ secrets.REDIS_PORT }}' \
+              -e REDIS_TLS='${{ secrets.REDIS_TLS }}' \
+              -e MAX_LOGIN_ATTEMPTS='${{ secrets.MAX_LOGIN_ATTEMPTS }}' \
+              -e BLOCK_TTL='${{ secrets.BLOCK_TTL }}' \
+              -e JWT_SECRET_KEY='${{ secrets.JWT_SECRET_KEY }}' \
+              -e NEXT_PUBLIC_APP_URL='${{ secrets.NEXT_PUBLIC_APP_URL }}' \
+              -e RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}' \
+              -e COMPANY_RESEND_GMAIL_ACCOUNT='${{ secrets.COMPANY_RESEND_GMAIL_ACCOUNT }}' \
+              -e CLIENT_EMAIL_1='${{ secrets.CLIENT_EMAIL_1 }}' \
+              -e CLIENT_EMAIL_2='${{ secrets.CLIENT_EMAIL_2 }}' \
+              -e ACCOUNTSID='${{ secrets.ACCOUNTSID }}' \
+              -e AUTHTOKEN='${{ secrets.AUTHTOKEN }}' \
+              -e FROMPHONENUMBER='${{ secrets.FROMPHONENUMBER }}' \
+              -e STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
+              -e STRIPE_WEBHOOK_SECRET='${{ secrets.STRIPE_WEBHOOK_SECRET }}' \
+              -e AUTH_SECRET='${{ secrets.AUTH_SECRET }}' \
+              -e JWT_SALT='${{ secrets.JWT_SALT }}' \
+              -e JWT_SECRET='${{ secrets.JWT_SECRET }}' \
+              -e GOOGLE_CLIENT_ID='${{ secrets.GOOGLE_CLIENT_ID }}' \
+              -e GOOGLE_CLIENT_ID_IOS='${{ secrets.GOOGLE_CLIENT_ID_IOS }}' \
+              -e GOOGLE_CLIENT_ID_WEB='${{ secrets.GOOGLE_CLIENT_ID_WEB }}' \
+              -e FIREBASE_SERVICE_ACCOUNT='${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' \
+              -e GOOGLE_CLIENT_EMAIL='${{ secrets.GOOGLE_CLIENT_EMAIL }}' \
+              -e GOOGLE_PROJECT_ID='${{ secrets.GOOGLE_PROJECT_ID }}' \
+              -e GOOGLE_PRIVATE_KEY2='${{ secrets.GOOGLE_PRIVATE_KEY2 }}' \
+              -e AWS_ACCESS_KEY_ID='${{ secrets.AWS_ACCESS_KEY_ID }}' \
+              -e OPENAI_API_KEY='${{ secrets.OPENAI_API_KEY }}' \
+              -e GOOGLE_GEMINI_KEY='${{ secrets.GOOGLE_GEMINI_KEY }}' \
+              -e REVENUE_CAT_KEY='${{ secrets.REVENUE_CAT_KEY }}' \
+              -e ADMIN_RESEND_GMAIL_ACCOUNT='${{ secrets.ADMIN_RESEND_GMAIL_ACCOUNT }}' \
+              -e AWS_REGION='${{ secrets.AWS_REGION }}' \
+              -e AWS_SECRET_ACCESS_KEY='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
+              -e AWS_BUCKET_NAME='${{ secrets.AWS_BUCKET_NAME }}' \
+              -e CLOUDFRONT_DOMAIN='${{ secrets.CLOUDFRONT_DOMAIN }}' \
+              -e CLOUDFRONT_KEY_PAIR_ID='${{ secrets.CLOUDFRONT_KEY_PAIR_ID }}' \
+              -e CLOUDFRONT_PRIVATE_KEY='${{ secrets.CLOUDFRONT_PRIVATE_KEY }}' \
+              -e NEXT_PUBLIC_AWS_BUCKET_PATH='${{ secrets.NEXT_PUBLIC_AWS_BUCKET_PATH }}' \
+              -e NODE_ENV='${{ secrets.NODE_ENV }}' \
+              -e STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
+              -e FRONTEND_URL='${{ secrets.FRONTEND_URL }}' \
+              -e MODE='${{ secrets.MODE }}' \
+              ${{ secrets.DOCKER_USERNAME }}/v-care-backend:latest || { echo 'Docker run failed'; exit 1; }
+
+            echo 'Container running successfully'
+
+            # Prune unused Docker resources to free up space
+            echo "Cleaning up unused Docker resources..."
+            docker system prune -af --volumes || { echo "Docker system prune failed"; exit 1; }
+            # Clean up temporary files and logs
+            echo "Cleaning up temporary files and logs..."
+            sudo rm -rf /tmp/*
+            sudo truncate -s 0 /var/log/*.log
+            echo "Cleaning up log files..."
+            sudo find /var/log/ -type f -name "*.log" -exec truncate -s 0 {} \;
+            echo "Checking disk usage after cleanup..."
+            df -h
+
+          ENDSSH

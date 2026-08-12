@@ -1,0 +1,8 @@
+name: Production
+variables:
+  - name: URL
+    value: https://staging-api.vcareprojectmanagement.com/api/
+  - name: TOKEN_ADMIN
+    value: ""
+  - name: TOKEN_USER
+    value: ""

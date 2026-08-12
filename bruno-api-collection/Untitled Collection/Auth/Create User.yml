@@ -1,0 +1,29 @@
+info:
+  name: Create User
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{URL}}create-user"
+  body:
+    type: json
+    data: |-
+      {
+          "firstname":"User",
+          "lastname":"Ankit",
+          "fullName":"User Ankit",
+          "email":"ankit123@yopmail.com",
+          "countryCode":"+91",
+          "phoneNumber":"9882211288",
+          "password":"12345678",
+          "fcmToken":"TEST-FCM-123123",
+          "deviceType":"WEB" //WEB, ANDROID, IOS
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
