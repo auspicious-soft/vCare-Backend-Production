@@ -9,7 +9,7 @@ import {
 import { CheckCourseExist } from "../utils/helpers.js";
 import { ExamStrategyModel } from "../models/exam-strategy-schema.js";
 import { getFileUrl } from "../helpers/index.js";
-
+ 
 export const createExamStrategy = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
