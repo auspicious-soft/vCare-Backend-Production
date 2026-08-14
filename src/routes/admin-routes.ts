@@ -439,7 +439,7 @@ adminRoutes
 
 // User Mock Exam *************************************
 adminRoutes.route("/plans-duration").put(updatePlansDuration);
-
+ 
 adminRoutes
   .route("/clear-redis-data")
   .get(async (req: Request, res: Response) => {
