@@ -219,7 +219,7 @@ export const createPlansDirectlyToStripe = async (req: any, res: Response) => {
         success: false,
         message: "courseName and courseId required",
       });
-    }
+    } 
 
     const existing = await PlanModel.find({ courseId });
     if (existing.length > 0) {
