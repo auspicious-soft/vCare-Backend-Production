@@ -11,7 +11,7 @@ import mongoose from "mongoose";
 let isReminderCronRunning = false;
 let isNotificationCronRunning = false;
 let isNotificationGarbageCollectionRunning = false;
-
+ 
 const sendReminderEmail = async (): Promise<void> => {
   try {
     const now = new Date();
