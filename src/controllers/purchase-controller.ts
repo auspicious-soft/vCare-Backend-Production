@@ -564,15 +564,15 @@ export const handleInAppAndroidWebhook = async (payload: any, req: any) => {
           $or: [
             {
               androidProductId: subscriptionId,
-              type: "PROD",
+              type: "LIVE",
             },
             {
               stripeProductId: subscriptionId,
-              type: "PROD",
+              type: "LIVE",
             },
             {
               iosProductId: subscriptionId,
-              type: "PROD",
+              type: "LIVE",
             },
           ],
         })) as any);
