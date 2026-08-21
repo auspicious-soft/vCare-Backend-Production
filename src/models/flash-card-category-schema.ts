@@ -15,7 +15,6 @@ const flashcardCategorySchema = new Schema<IFlashCardsCategory>(
     courseId: {
       type: Schema.Types.ObjectId,
       ref: "course",
-      index: true,
     },
     categoryName: {
       type: String,
@@ -33,15 +32,9 @@ const flashcardCategorySchema = new Schema<IFlashCardsCategory>(
       type: String,
       enum: ["ACTIVE", "DELETED", "INACTIVE"],
       default: "ACTIVE",
-      index: true,
     },
   },
   { timestamps: true },
-);
-
-flashcardCategorySchema.index(
-  { courseId: 1, categoryName: 1 },
-  { unique: true },
 );
 
 export const FlashCardCategoryModel = mongoose.model<IFlashCardsCategory>(
