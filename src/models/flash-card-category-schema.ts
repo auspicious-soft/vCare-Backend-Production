@@ -9,7 +9,7 @@ export interface IFlashCardsCategory extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
- 
+
 const flashcardCategorySchema = new Schema<IFlashCardsCategory>(
   {
     courseId: {
