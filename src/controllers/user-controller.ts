@@ -81,9 +81,13 @@ export const getUserCourses = async (req: Request, res: Response) => {
     // -------------------------------
     const purchaseData = await PurchaseModel.find({
       userId,
-      purchaseType: "COURSE",
+      $or: [
+        { purchaseType: "COURSE" },
+        { type: "SUBSCRIPTION", planId: { $ne: null } },
+      ],
     })
       .sort({ purchaseAmount: -1 }) // newest first
+      .populate("planId")
       .lean();
 
     // -------------------------------
@@ -93,29 +97,26 @@ export const getUserCourses = async (req: Request, res: Response) => {
     // -------------------------------
     const purchaseMap = new Map<string, any>();
 
-    for (const purchase of purchaseData) {
-      const key = purchase.purchasedProduct.toString();
-
-      const existing = purchaseMap.get(key);
-
-      if (!existing) {
-        purchaseMap.set(key, purchase);
-        continue;
+    for (const purchase of purchaseData as any[]) {
+      const plan = purchase.planId;
+      const keys = new Set<string>();
+      if (purchase.purchasedProduct) {
+        keys.add(purchase.purchasedProduct.toString());
+      }
+      if (plan?.courseId) {
+        keys.add(plan.courseId.toString());
       }
 
-      // Existing SUCCESS should never be replaced
-      if (existing.status === "SUCCESS") {
-        continue;
-      }
+      for (const key of keys) {
+        const existing = purchaseMap.get(key);
 
-      // SUCCESS replaces anything else
-      if (purchase.status === "SUCCESS") {
-        purchaseMap.set(key, purchase);
-        continue;
+        if (
+          !existing ||
+          (existing.status !== "SUCCESS" && purchase.status === "SUCCESS")
+        ) {
+          purchaseMap.set(key, purchase);
+        }
       }
-
-      // Since records are already sorted newest first,
-      // keep the first non-success record.
     }
 
     // -------------------------------
@@ -136,10 +137,23 @@ export const getUserCourses = async (req: Request, res: Response) => {
       }
 
       let daysLeft = 0;
+      let purchaseEndDate = purchase.endDate;
+      if (
+        !purchaseEndDate &&
+        purchase.purchaseDate &&
+        (purchase.planId as any)?.durationInMonths
+      ) {
+        purchaseEndDate = new Date(purchase.purchaseDate);
+        purchaseEndDate.setMonth(
+          purchaseEndDate.getMonth() +
+            Number((purchase.planId as any).durationInMonths),
+        );
+        purchaseEndDate.setHours(23, 59, 59, 999);
+      }
 
-      if (purchase.endDate) {
+      if (purchaseEndDate) {
         const now = new Date();
-        const end = new Date(purchase.endDate);
+        const end = new Date(purchaseEndDate);
 
         const diff = end.setHours(23, 59, 59, 999) - now.getTime();
 
@@ -159,7 +173,7 @@ export const getUserCourses = async (req: Request, res: Response) => {
       return {
         ...course,
         purchaseStatus: purchase.type,
-        purchaseType: purchase.purchaseType,
+        purchaseType: purchase.purchaseType || "COURSE",
         daysLeft,
         status: courseStatus,
         image: getFileUrlUser(course?.image),

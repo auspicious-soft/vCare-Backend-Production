@@ -349,8 +349,9 @@ export const afterSubscriptionCreatedService = async (
         planId: isCustom === "true" ? null : session.metadata?.planId,
         purchasedProduct: session.metadata?.purchasedProduct,
         status: "SUCCESS",
-        purchaseType: isCustom ? session.metadata?.purchaseType : null,
-        endDate: isCustom ? session.metadata?.endDate : null,
+        purchaseType:
+          isCustom === "true" ? session.metadata?.purchaseType : "COURSE",
+        endDate: session.metadata?.endDate || null,
       });
       const cacheKey = "DASHBOARD:NEW_SUBSCRIPTION_LAST_7_DAYS";
       await redis.del(cacheKey);
