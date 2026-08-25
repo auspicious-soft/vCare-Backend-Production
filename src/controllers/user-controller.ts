@@ -2212,8 +2212,7 @@ export const getPracticeExamQuestions = async (req: Request, res: Response) => {
           status: "ACTIVE",
           isPractice: true,
         },
-      },
-      { $sample: { size: 20 } }, // adjust limit if needed
+      }
     ]);
 
     if (!questions.length) {
@@ -4963,6 +4962,7 @@ export const getUserById = async (req: Request, res: Response) => {
         DOMAIN_TASK: DomainModel,
         APPLICATION_SUPPORT: ApplicationSupportModel,
         FLASH_CARDS: FlashCardCategoryModel,
+        EXAM_STRATEGY: ExamStrategyModel,
         COURSE: CourseModel,
       };
 
@@ -5000,6 +5000,45 @@ export const getUserById = async (req: Request, res: Response) => {
         Object.keys(groupedIds).map(async (purchaseType) => {
           const model = individualModelMap[purchaseType];
           if (!model) return;
+
+          if (purchaseType === "EXAM_STRATEGY") {
+            const requestedIds = groupedIds[purchaseType] || [];
+            const requestedIdSet = new Set(
+              requestedIds.map((id: any) => id.toString()),
+            );
+            const docs = await model
+              .find({
+                $or: [
+                  { _id: { $in: requestedIds } },
+                  { "data._id": { $in: requestedIds } },
+                ],
+              })
+              .select("_id name courseId data")
+              .populate("courseId", "name")
+              .lean();
+
+            const map = new Map();
+            docs.forEach((doc: any) => {
+              if (requestedIdSet.has(doc._id.toString())) {
+                map.set(doc._id.toString(), {
+                  name: doc.name,
+                  courseId: doc.courseId,
+                });
+              }
+
+              doc.data?.forEach((nestedItem: any) => {
+                if (requestedIdSet.has(nestedItem._id.toString())) {
+                  map.set(nestedItem._id.toString(), {
+                    ...nestedItem,
+                    courseId: doc.courseId,
+                  });
+                }
+              });
+            });
+
+            dataMap[purchaseType] = map;
+            return;
+          }
 
           let query = model
             .find({ _id: { $in: groupedIds[purchaseType] } })
@@ -5042,6 +5081,7 @@ export const getUserById = async (req: Request, res: Response) => {
 
         const purchasedItem =
           product?.name ||
+          product?.fileName ||
           product?.module ||
           product?.domain ||
           product?.categoryName ||
@@ -5049,7 +5089,8 @@ export const getUserById = async (req: Request, res: Response) => {
           item?.planId?.planName ||
           "N/A";
         const planName = item?.planId?.planName || "N/A";
-        const courseName = product?.courseId?.name || "N/A";
+        const courseName =
+          product?.courseId?.name || item?.planId?.courseName || "N/A";
         return {
           purchaseId: item._id,
           purchaseType: item.purchaseType,
@@ -5916,7 +5957,7 @@ export const addAccess = async (req: Request, res: Response) => {
     if (type === "COURSE" && planId) {
       for (purchasedProduct of purchasedProduct) {
         // const data = await findObject[type];
-        const data = PlanModel.findOne({
+        const data = await PlanModel.findOne({
           _id: purchasedProduct,
           status: "ACTIVE",
         })
