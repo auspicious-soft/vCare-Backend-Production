@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import { updateFileInUseByUrl } from "./files-controller.js";
 import { validate } from "node-cron";
 import { getFileUrl } from "../helpers/index.js";
+import { PracticeExamModel } from "../models/practice-exam-schema.js";
 
 const escapeRegex = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -224,12 +225,22 @@ export const getQuestionsSummary = async (req: Request, res: Response) => {
     const check = await CheckCourseExist(courseId);
     if (typeof check === "string") throw new Error(check);
 
-    const filter = {
-      courseId: new mongoose.Types.ObjectId(courseId as string),
+    const courseObjectId = new mongoose.Types.ObjectId(courseId as string);
+    const filter: Record<string, unknown> = {
       isPractice: isPractice === "true",
       domainName: { $ne: null },
       status: "ACTIVE",
     };
+
+    if (isPractice === "true") {
+      const practiceExamIds = await PracticeExamModel.find({
+        courseId: courseObjectId,
+      }).distinct("_id");
+
+      filter.practiceExamId = { $in: practiceExamIds };
+    } else {
+      filter.courseId = courseObjectId;
+    }
 
     const summary = await QuestionModel.aggregate([
       {
@@ -276,6 +287,7 @@ export const getQuestions = async (req: Request, res: Response) => {
       limit = "10",
       domainName = null,
       search,
+      isPractice = "false",
     } = req.query;
     if (!courseId) {
       throw new Error("courseId is required");
@@ -290,11 +302,22 @@ export const getQuestions = async (req: Request, res: Response) => {
     const pageNumber = Math.max(Number(page), 1);
     const pageSize = Math.max(Number(limit), 1);
 
+    const courseObjectId = new mongoose.Types.ObjectId(courseId as string);
     const filter: any = {
-      courseId: new mongoose.Types.ObjectId(courseId as string),
       domainName,
       status: "ACTIVE",
+      isPractice: isPractice === "true",
     };
+
+    if (isPractice === "true") {
+      const practiceExamIds = await PracticeExamModel.find({
+        courseId: courseObjectId,
+      }).distinct("_id");
+
+      filter.practiceExamId = { $in: practiceExamIds };
+    } else {
+      filter.courseId = courseObjectId;
+    }
 
     const searchText = typeof search === "string" ? search.trim() : "";
     if (searchText) {
