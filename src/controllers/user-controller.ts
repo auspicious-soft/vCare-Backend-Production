@@ -2709,6 +2709,11 @@ export const getUserMockExam = async (req: Request, res: Response) => {
       .populate("mockExamId")
       .lean();
 
+    // Filter paused exams to only include those from the requested course
+    pausedExams = pausedExams.filter((exam: any) =>
+      exam.mockExamId?.courseId?.toString() === id
+    );
+
     pausedExams = pausedExams.map((exam: any) => {
       const totalMinutes = exam.mockExamId?.timeInMin || "00:00:00";
       const [h1, m1, s1] = totalMinutes.split(":").map(Number);
