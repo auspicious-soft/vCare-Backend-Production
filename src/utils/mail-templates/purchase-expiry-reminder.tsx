@@ -62,7 +62,7 @@ const PurchaseExpiryReminderEmail: React.FC<Readonly<PurchaseExpiryReminderEmail
             <Link href={"https://www.vcareprojectmanagement.com/pages/book-appointment"}>https://www.vcareprojectmanagement.com/pages/book-appointment</Link>
           </Text>
           <Text>
-            Interested in attending a live class? Register here: <Link href={process.env.FRONTEND_URL}>{process.env.FRONTEND_URL}</Link>
+            Interested in attending a live class? Register here: <Link href={process.env.EXPIRY_FRONTEND_URL}>Register Now</Link>
           </Text>
         <Text>If you have already renewed or upgraded your access, please disregard this email.</Text>
         {/* ── Footer ── */}
