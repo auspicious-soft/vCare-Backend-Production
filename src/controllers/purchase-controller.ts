@@ -184,7 +184,29 @@ export const createCheckoutSessionService = async (req: any, res: Response) => {
           stripeCustomerId: customer.id,
         });
       } else {
-        customer = await stripe.customers.retrieve(user.stripeCustomerId);
+        try {
+          // Try to retrieve existing customer from Stripe
+          customer = await stripe.customers.retrieve(user.stripeCustomerId);
+        } catch (error: any) {
+          // ✅ If customer doesn't exist in Stripe, create a new one
+          if (error.code === "resource_missing" || error.statusCode === 404) {
+            console.log(
+              `⚠️ Stripe customer ${user.stripeCustomerId} not found. Creating new customer.`,
+            );
+            customer = await stripe.customers.create({
+              email,
+              name,
+              metadata: { userId },
+            });
+
+            // Update database with new Stripe customer ID
+            await UserModel.findByIdAndUpdate(userId, {
+              stripeCustomerId: customer.id,
+            });
+          } else {
+            throw error; // Re-throw if it's a different error
+          }
+        }
       }
 
       // 🔐 Build line item safely
