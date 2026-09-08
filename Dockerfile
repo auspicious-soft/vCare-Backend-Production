@@ -24,7 +24,7 @@
 
 # CMD ["npm", "start"]
 
-FROM node:20-bullseye-slim
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
@@ -43,9 +43,7 @@ RUN apt-get update \
 
 COPY package*.json ./
 
-RUN npm cache clean --force
-
-RUN npm install
+RUN npm ci --no-audit --no-fund
 
 COPY . .
 
