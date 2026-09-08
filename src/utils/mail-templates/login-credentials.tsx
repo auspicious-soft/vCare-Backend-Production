@@ -26,7 +26,7 @@ const LoginCredentials: React.FC<EmailProps> = ({ email, password, name }) => {
           <a
             href={
               process.env.FRONTEND_ADMIN_URL ||
-              "https://dharma-admin-panel.vercel.app/login"
+              "https://admin.vcareprojectmanagement.com/login"
             }
             target="_blank"
             rel="noopener noreferrer"

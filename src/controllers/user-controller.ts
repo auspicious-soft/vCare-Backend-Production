@@ -201,12 +201,22 @@ export const userHome = async (req: Request, res: Response) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const modules = await LessonModel.find({
+      courseId: id,
+      status: "ACTIVE",
+    }).lean();
+    const domains = await DomainModel.find({
+      courseId: id,
+      status: "ACTIVE",
+    })
+      .select("_id")
+      .lean();
+
     /* ---------------- PARALLEL FETCH ---------------- */
 
     const [
       unreadNotifications,
       bookmarks,
-      modules,
       progressList,
       progressData,
       examData,
@@ -234,14 +244,21 @@ export const userHome = async (req: Request, res: Response) => {
         .populate("moduleId")
         .lean(),
 
-      LessonModel.find({ courseId: id, status: "ACTIVE" }).lean(),
-
-      ProgressModel.find({ userId, moduleId: { $ne: null } })
+      ProgressModel.find({
+        userId,
+        moduleId: { $in: modules.map((module: any) => module._id) },
+      })
         .populate("moduleId")
         .populate("userId", "fullName image")
         .lean(), // ✅ single source of truth
 
-      ProgressModel.find({ userId })
+      ProgressModel.find({
+        userId,
+        $or: [
+          { moduleId: { $in: modules.map((module: any) => module._id) } },
+          { domainId: { $in: domains.map((domain: any) => domain._id) } },
+        ],
+      })
         .populate("userId", "fullName image")
         .populate("moduleId")
         .populate("domainId")
@@ -255,6 +272,7 @@ export const userHome = async (req: Request, res: Response) => {
       })
         .populate({
           path: "mockExamId",
+          match: { courseId: courseObjectId },
           populate: { path: "courseId" },
         })
         .populate("userId", "fullName image")
@@ -262,7 +280,7 @@ export const userHome = async (req: Request, res: Response) => {
         .limit(10)
         .lean(),
 
-      UserDashboardModel.find({ userId })
+      UserDashboardModel.find({ userId, courseId: courseObjectId })
         .populate("userId", "fullName image")
         .populate("courseId")
         .populate("questionOfTheDay")
@@ -594,6 +612,7 @@ export const userHome = async (req: Request, res: Response) => {
     /* ---------------- ACTIVITIES ---------------- */
 
     const activities: any[] = [];
+    const courseExamData = examData.filter((item: any) => item.mockExamId);
 
     progressData.forEach((item: any) => {
       if (item.moduleId) {
@@ -631,7 +650,7 @@ export const userHome = async (req: Request, res: Response) => {
       }
     });
 
-    examData.forEach((item: any) => {
+    courseExamData.forEach((item: any) => {
       activities.push({
         _id: item._id,
         currentStatus: item.currentStatus,
