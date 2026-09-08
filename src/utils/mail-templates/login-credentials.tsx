@@ -32,7 +32,7 @@ const LoginCredentials: React.FC<EmailProps> = ({ email, password, name }) => {
             rel="noopener noreferrer"
           >
             {process.env.FRONTEND_ADMIN_URL ||
-              "https://dharma-admin-panel.vercel.app/login"}
+              "https://admin.vcareprojectmanagement.com/login"}
           </a>
         </Text>
         <Text style={{ fontSize: "16px", fontWeight: "bold", color: "#000" }}>
