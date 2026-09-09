@@ -31,6 +31,7 @@ import {
   sendWelcomeUserEmail,
 } from "../utils/mail-helper.js";
 import { getFileUrl } from "../helpers/index.js";
+import { UserSessionModel } from "../models/user-session-schema.js";
 
 // Admin Login
 export const adminLogin = async (req: Request, res: Response) => {
@@ -313,6 +314,7 @@ export const userLogin = async (req: Request, res: Response) => {
         id: user._id,
         role: user.role,
         access: [],
+        jti: randomUUID(),
       },
       process.env.JWT_SECRET_KEY!,
       { expiresIn: "30d" },
@@ -321,6 +323,16 @@ export const userLogin = async (req: Request, res: Response) => {
     const refreshToken = randomUUID();
 
     await clearLoginFailures(email, IP);
+    // A new login replaces the previous device session, including its refresh
+    // token, so the old device cannot create a new valid access-token session.
+    await UserSessionModel.deleteMany({ userId: user._id });
+    await RefreshTokenModel.deleteMany({ userId: user._id, userType: "USER" });
+    await UserSessionModel.create({
+      userId: user._id,
+      tokenHash: hashToken(accessToken),
+      userType: "USER",
+      expiresAt: dayjs().add(30, "day").toDate(),
+    });
     await RefreshTokenModel.create({
       userId: user._id,
       tokenHash: hashToken(refreshToken),
@@ -411,10 +423,24 @@ export const refreshToken = async (req: Request, res: Response) => {
         id: user_admin._id,
         role: user_admin.role,
         access: user_admin?.access || [],
+        jti: randomUUID(),
       },
       process.env.JWT_SECRET_KEY!,
       { expiresIn: "15m" },
     );
+
+    if (storedToken.userType === "USER") {
+      // Do not delete the previous access-token session here. Browser tabs can
+      // still have that token (or an in-flight request) while another tab
+      // refreshes. jwt.verify and the TTL index limit every record to its JWT
+      // lifetime; a later device login still deletes all of them.
+      await UserSessionModel.create({
+        userId: storedToken.userId,
+        tokenHash: hashToken(accessToken),
+        userType: "USER",
+        expiresAt: dayjs().add(15, "minute").toDate(),
+      });
+    }
 
     if (
       user_admin?.deviceType &&
@@ -596,6 +622,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
           id: user._id,
           role: user.role,
           access: [],
+          jti: randomUUID(),
         },
         process.env.JWT_SECRET_KEY!,
         { expiresIn: "15m" },
@@ -609,6 +636,12 @@ export const verifyOTP = async (req: Request, res: Response) => {
         ip: req.ip as string,
         userType: "USER",
         expiresAt: dayjs().add(30, "day").toDate(),
+      });
+      await UserSessionModel.create({
+        userId: user._id,
+        tokenHash: hashToken(accessToken),
+        userType: "USER",
+        expiresAt: dayjs().add(15, "minute").toDate(),
       });
 
       res.cookie("refreshToken", refreshToken, {
@@ -904,6 +937,7 @@ export const socialLogin = async (req: Request, res: Response) => {
         id: user._id,
         role: user.role,
         access: [],
+        jti: randomUUID(),
       },
       process.env.JWT_SECRET_KEY as string,
       { expiresIn: "30d" },
@@ -912,6 +946,14 @@ export const socialLogin = async (req: Request, res: Response) => {
     const refreshToken = randomUUID();
 
     await clearLoginFailures(email, IP);
+    await UserSessionModel.deleteMany({ userId: user._id });
+    await RefreshTokenModel.deleteMany({ userId: user._id, userType: "USER" });
+    await UserSessionModel.create({
+      userId: user._id,
+      tokenHash: hashToken(accessToken),
+      userType: "USER",
+      expiresAt: dayjs().add(30, "day").toDate(),
+    });
 
     await RefreshTokenModel.create({
       userId: user._id,

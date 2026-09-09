@@ -1430,15 +1430,35 @@ export const getCurrentSubscription = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user._id;
     const { courseId } = req.query;
+
+    if (!courseId) {
+      return BADREQUEST(res, "courseId is required");
+    }
+
+    const coursePlans = await PlanModel.find({
+      courseId,
+      status: "ACTIVE",
+    })
+      .select("_id")
+      .lean();
+
+    const planIds = coursePlans.map((plan) => plan._id);
+
+    if (!planIds.length) {
+      return OK(res, [], "No active subscription found");
+    }
+
     const subscription = await PurchaseModel.find({
       type: "SUBSCRIPTION",
-      purchasedProduct: courseId,
+      planId: { $in: planIds },
       userId,
       status: "SUCCESS",
+      purchaseType: "COURSE",
     })
       .sort({ purchaseAmount: -1 })
       .populate("planId")
       .lean();
+
     return OK(res, subscription, "Filtered Data Fetched");
   } catch (err: any) {
     console.log(err);

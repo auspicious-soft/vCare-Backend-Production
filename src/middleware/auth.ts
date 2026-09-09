@@ -6,6 +6,8 @@ import type { NextFunction, Request, Response } from "express";
 import { access } from "../utils/constant.js";
 import { trackDailyActiveUser } from "../utils/helpers.js";
 import { getFileUrl } from "../helpers/index.js";
+import { UserSessionModel } from "../models/user-session-schema.js";
+import { hashToken } from "../helpers/auth-helpers.js";
 
 export interface AuthRequest extends Request {
   user?: any;
@@ -64,6 +66,15 @@ export const userAuthGuard = async (
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY!) as any;
+
+    const validSession = await UserSessionModel.findOne({
+      userId: decoded?.id,
+      tokenHash: hashToken(token),
+    }).lean();
+
+    if (!validSession) {
+      throw new Error("Session expired, please login again");
+    }
 
     const checkUser = await UserModel.findById(decoded?.id).lean();
 

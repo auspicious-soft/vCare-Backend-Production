@@ -1,10 +1,7 @@
 import type { Request, Response } from "express";
 import { Router } from "express";
 import * as fs from 'node:fs';
-import { access as accessList } from "../utils/constant.js";
-import bcrypt from "bcryptjs";
-import { AdminModel } from "../models/admin-schema.js";
-import { BADREQUEST, INTERNAL_SERVER_ERROR, OK } from "../utils/responses.js";
+import { INTERNAL_SERVER_ERROR, OK } from "../utils/responses.js";
 import {
   adminLogin,
   createUserAccount,
@@ -18,11 +15,6 @@ import {
   submitEnquiry,
 } from "../controllers/auth-controller.js";
 import { getPlatformInfo } from "../controllers/user-controller.js";
-import { rawBodyMiddleware } from "../middleware/plan.js";
-import { decodeSignedPayload } from "../helpers/plans-helpers.js";
-import { handleInAppIOSWebhook } from "../controllers/purchase-controller.js";
-import { sendPasswordResetEmail } from "../utils/mail-helper.js";
-import { PurchaseModel } from "../models/purchase-schema.js";
 import { enquiryRateLimiter } from "../utils/helpers.js";
 import { uploadMultiCSV } from "../middleware/multer.js";
 import { generateKeyPairSync } from "crypto";
