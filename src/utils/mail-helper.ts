@@ -254,13 +254,13 @@ export const sendPasswordResetEmail = async (email: string, token: string, name:
   }
 };
 
-export const sendLoginCredentials = async (email: string, password: string, name: string) => {
+export const sendLoginCredentials = async (email: string, password: string, name: string, mailType: "admin" | "user" = "admin") => {
   try {
     const result = await resend.emails.send({
       from: process.env.COMPANY_RESEND_GMAIL_ACCOUNT as string,
       to: email,
       subject: "Login Credentials",
-      react: await LoginCredentials({ email, password, name }),
+      react: await LoginCredentials({ email, password, name,mailType }),
     });
 
     if (!result || result.error) {

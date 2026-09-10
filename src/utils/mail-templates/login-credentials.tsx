@@ -6,9 +6,16 @@ interface EmailProps {
   email: string;
   password: string;
   name: string;
+  mailType?: "admin" | "user";
 }
 
-const LoginCredentials: React.FC<EmailProps> = ({ email, password, name }) => {
+const LoginCredentials: React.FC<EmailProps> = ({ email, password, name,mailType = "admin", }) => {
+  const loginUrl =
+    mailType === "admin"
+      ? process.env.FRONTEND_ADMIN_URL ||
+        "https://admin.vcareprojectmanagement.com/login"
+      : process.env.FRONTEND_URL ||
+        "https://learn.vcareprojectmanagement.com/login";
   return (
     <Html lang="en">
       <Head>
@@ -23,16 +30,12 @@ const LoginCredentials: React.FC<EmailProps> = ({ email, password, name }) => {
         </Text>
         <Text style={{ fontSize: "16px", fontWeight: "bold", color: "#000" }}>
           Login Page:{" "}
-          <a
-            href={
-              process.env.FRONTEND_ADMIN_URL ||
-              "https://admin.vcareprojectmanagement.com/login"
-            }
+           <a
+            href={loginUrl}
             target="_blank"
             rel="noopener noreferrer"
           >
-            {process.env.FRONTEND_ADMIN_URL ||
-              "https://admin.vcareprojectmanagement.com/login"}
+            {loginUrl}
           </a>
         </Text>
         <Text style={{ fontSize: "16px", fontWeight: "bold", color: "#000" }}>

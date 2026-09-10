@@ -802,7 +802,7 @@ export const adminUpdateUser = async (req: Request, res: Response) => {
       user.password = await bcrypt.hash(plain, 10);
 
       // Send email to user with new password
-      await sendLoginCredentials(user.email, plain, user.firstname || "there");
+      await sendLoginCredentials(user.email, plain, user.firstname || "there","user");
     }
 
     await user.save();
