@@ -989,6 +989,7 @@ export const socialLogin = async (req: Request, res: Response) => {
       "Login successful",
     );
   } catch (err: any) {
+    // console.log('err: ', err);
     console.error("Social Login Error:", err);
     return BADREQUEST(res, err?.message || "Internal Server Error");
   }
