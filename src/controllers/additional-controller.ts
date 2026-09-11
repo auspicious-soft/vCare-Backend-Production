@@ -26,6 +26,11 @@ import { updateFileInUseByUrl } from "./files-controller.js";
 import { UserModel } from "../models/user-schema.js";
 import redis from "../config/redis.js";
 
+const toSentenceCase = (value: string = "") => {
+  return value
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
 export const getNavigations = async (req: Request, res: Response) => {
   try {
     const data = await NavigationModel.find();
@@ -37,6 +42,7 @@ export const getNavigations = async (req: Request, res: Response) => {
     return INTERNAL_SERVER_ERROR(res, "Internal Server Error");
   }
 };
+
 export const updateNavigations = async (req: Request, res: Response) => {
   try {
     const { name, key } = req.body;
@@ -453,7 +459,7 @@ export const updateReportedProblemStatus = async (
     const issueDescription = `${checkExist?.courseId?.name} - ${checkExist?.type} - ${checkExist?.comments}`;
     if (sendReportEmail && !checkExist?.emailSent && status === "RESOLVED") {
       const result = await sendIssueResolvedEmailToUser({
-        fullName: userDetails?.firstname || "",
+        fullName: toSentenceCase(userDetails?.firstname || ""),
         email: userDetails?.email,
         issueTitle: issueTitle,
         issueDescription: issueDescription,
