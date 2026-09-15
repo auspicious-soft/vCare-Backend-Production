@@ -164,7 +164,10 @@ export const dashboard = async (req: Request, res: Response) => {
           .populate("userId", "fullName image")
           .lean(),
 
-        MockExamResultModel.find({ status: "ACTIVE" })
+        MockExamResultModel.find({
+          status: "ACTIVE",
+          currentStatus: { $in: ["COMPLETED", "PAUSED"] },
+        })
           .sort({ updatedAt: -1 })
           .limit(15)
           .populate({
@@ -213,6 +216,8 @@ export const dashboard = async (req: Request, res: Response) => {
     });
 
     examData.forEach((item: any) => {
+      if (item.currentStatus !== "COMPLETED") return;
+
       activities.push({
         type: "MOCK_EXAM",
         userName: item.userId?.fullName,

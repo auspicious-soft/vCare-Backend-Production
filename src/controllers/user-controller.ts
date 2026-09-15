@@ -351,18 +351,24 @@ export const userHome = async (req: Request, res: Response) => {
       /* -------- PURCHASES -------- */
 
       PurchaseModel.findOne({
-        purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] },
         userId,
         status: "SUCCESS",
+        $or: [
+          { purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] } },
+          { type: "SUBSCRIPTION", planId: { $ne: null } },
+        ],
       })
         .sort({ purchaseAmount: -1 })
         .populate("planId")
         .lean() as any,
 
       PurchaseModel.find({
-        purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] },
         userId,
         status: "SUCCESS",
+        $or: [
+          { purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] } },
+          { type: "SUBSCRIPTION", planId: { $ne: null } },
+        ],
       })
         .sort({ purchaseAmount: -1 })
         .populate("planId")
@@ -540,9 +546,19 @@ export const userHome = async (req: Request, res: Response) => {
     };
 
     /* ---------------- QUESTION OF THE DAY ---------------- */
-    const canViewQuestionOfTheDay = coursePurchases.some((purchase: any) =>
-      Boolean(purchase?.planId?.questionOfTheDay),
-    );
+    const canViewQuestionOfTheDay = coursePurchases.some((purchase: any) => {
+      const matchesCourse =
+        purchase?.purchasedProduct?.toString() === id.toString() ||
+        purchase?.planId?.courseId?.toString() === id.toString();
+
+      if (!matchesCourse) return false;
+
+      if (purchase?.planId) {
+        return Boolean(purchase.planId.questionOfTheDay);
+      }
+
+      return true;
+    });
     let questionOfTheDayResponse: any = {
       status: "NOT_ACCESSABLE",
     };
@@ -717,7 +733,7 @@ export const userHome = async (req: Request, res: Response) => {
     );
 
     /* ---------------- RESPONSE (UNCHANGED) ---------------- */
-    console.log("coursePurchases", coursePurchases);
+    
     return OK(
       res,
       {
@@ -946,15 +962,25 @@ export const usersLessonsAndVideos = async (req: Request, res: Response) => {
         { $group: { _id: "$lessonId", count: { $sum: 1 } } },
       ]),
 
-      PurchaseModel.findOne({
+      PurchaseModel.find({
         userId,
-        purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] },
         endDate: { $gte: new Date() },
         status: "SUCCESS",
+        $or: [
+          { purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] } },
+          { type: "SUBSCRIPTION", planId: { $ne: null } },
+        ],
       })
         .sort({ purchaseAmount: -1 })
         .populate("planId")
-        .lean() as any,
+        .lean()
+        .then((purchases: any[]) =>
+          purchases.find(
+            (purchase) =>
+              purchase.purchasedProduct?.toString() === id.toString() ||
+              purchase.planId?.courseId?.toString() === id.toString(),
+          ) || null,
+        ) as any,
 
       PurchaseModel.find({
         userId,
@@ -1533,15 +1559,25 @@ export const usersDomainsAndTasks = async (req: Request, res: Response) => {
           isBookmarked: true,
         }).lean(),
 
-        PurchaseModel.findOne({
+        PurchaseModel.find({
           userId,
-          purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] },
           endDate: { $gte: new Date() },
           status: "SUCCESS",
+          $or: [
+            { purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] } },
+            { type: "SUBSCRIPTION", planId: { $ne: null } },
+          ],
         })
           .sort({ purchaseAmount: -1 })
           .populate("planId")
-          .lean() as any,
+          .lean()
+          .then((purchases: any[]) =>
+            purchases.find(
+              (purchase) =>
+                purchase.purchasedProduct?.toString() === id.toString() ||
+                purchase.planId?.courseId?.toString() === id.toString(),
+            ) || null,
+          ) as any,
 
         PurchaseModel.find({
           userId,
@@ -1734,15 +1770,25 @@ export const getUserApplicationSupport = async (
           applicationSupportId: { $ne: null },
         }).select("applicationSupportId"),
 
-        PurchaseModel.findOne({
+        PurchaseModel.find({
           userId,
-          purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] },
           endDate: { $gte: new Date() },
           status: "SUCCESS",
+          $or: [
+            { purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] } },
+            { type: "SUBSCRIPTION", planId: { $ne: null } },
+          ],
         })
           .sort({ purchaseAmount: -1 })
           .populate("planId")
-          .lean() as any,
+          .lean()
+          .then((purchases: any[]) =>
+            purchases.find(
+              (purchase) =>
+                purchase.purchasedProduct?.toString() === id.toString() ||
+                purchase.planId?.courseId?.toString() === id.toString(),
+            ) || null,
+          ) as any,
 
         PurchaseModel.find({
           userId,
@@ -1855,15 +1901,25 @@ export const getUserExamStrategy = async (req: Request, res: Response) => {
           examStrategyId: { $ne: null },
         }).select("examStrategyId"),
 
-        PurchaseModel.findOne({
+        PurchaseModel.find({
           userId,
-          purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] },
           endDate: { $gte: new Date() },
           status: "SUCCESS",
+          $or: [
+            { purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] } },
+            { type: "SUBSCRIPTION", planId: { $ne: null } },
+          ],
         })
           .sort({ purchaseAmount: -1 })
           .populate("planId")
-          .lean() as any,
+          .lean()
+          .then((purchases: any[]) =>
+            purchases.find(
+              (purchase) =>
+                purchase.purchasedProduct?.toString() === id.toString() ||
+                purchase.planId?.courseId?.toString() === id.toString(),
+            ) || null,
+          ) as any,
 
         PurchaseModel.find({
           userId,
@@ -1997,17 +2053,29 @@ export const getUserFlashcardCategory = async (req: Request, res: Response) => {
         },
       ]),
 
-      PurchaseModel.findOne({
+      PurchaseModel.find({
         userId,
-        purchasedProduct: {
-          $in: [courseId, new mongoose.Types.ObjectId(courseId)],
-        },
         endDate: { $gte: new Date() },
         status: "SUCCESS",
+        $or: [
+          {
+            purchasedProduct: {
+              $in: [courseId, new mongoose.Types.ObjectId(courseId)],
+            },
+          },
+          { type: "SUBSCRIPTION", planId: { $ne: null } },
+        ],
       })
         .sort({ purchaseAmount: -1 })
         .populate("planId")
-        .lean() as any,
+        .lean()
+        .then((purchases: any[]) =>
+          purchases.find(
+            (purchase) =>
+              purchase.purchasedProduct?.toString() === courseId.toString() ||
+              purchase.planId?.courseId?.toString() === courseId.toString(),
+          ) || null,
+        ) as any,
 
       PurchaseModel.find({
         userId,
