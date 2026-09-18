@@ -6,9 +6,14 @@ export interface IMockExamQuestion extends Document {
   isCorrect: Boolean | null;
   answerJson: any;
   isAttempted: Boolean;
+  sequence: number;
+  optionOrder: {
+    mcq?: string[];
+    dndOptions?: string[];
+    fib?: string[];
+  };
   createdAt?: Date;
   updatedAt?: Date;
-
 }
 
 const mockExamQuestionSchema = new Schema<IMockExamQuestion>(
@@ -29,9 +34,17 @@ const mockExamQuestionSchema = new Schema<IMockExamQuestion>(
       type: Boolean,
       default: false,
     },
-    answerJson:{
+    answerJson: {
       type: Schema.Types.Mixed,
       default: null,
+    },
+    sequence: {
+      type: Number,
+      default: 0,
+    },
+    optionOrder: {
+      type: Schema.Types.Mixed,
+      default: {},
     },
   },
   { timestamps: true },

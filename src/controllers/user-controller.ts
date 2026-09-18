@@ -54,6 +54,59 @@ import {
 } from "../utils/mail-helper.js";
 import { deleteFileFromS3 } from "../config/s3.js";
 
+const captureOptionOrder = (q: any) => {
+  const order: { mcq?: string[]; dndOptions?: string[]; fib?: string[] } = {};
+
+  if (q.type === "MCQ" && Array.isArray(q.mcq)) {
+    order.mcq = q.mcq.map((opt: any) => opt?._id?.toString()).filter(Boolean);
+  }
+  if (q.type === "DND" && q.dnd?.options?.length) {
+    order.dndOptions = q.dnd.options.map((opt: any) => opt?.id).filter(Boolean);
+  }
+  if (q.type === "FIB" && Array.isArray(q.fib)) {
+    order.fib = q.fib.map((opt: any) => opt?._id?.toString()).filter(Boolean);
+  }
+
+  return order;
+};
+
+const applyOptionOrder = (
+  q: any,
+  order?: { mcq?: string[]; dndOptions?: string[]; fib?: string[] },
+) => {
+  if (!order) return q;
+
+  if (q.type === "MCQ" && order.mcq?.length && Array.isArray(q.mcq)) {
+    const map = new Map(q.mcq.map((opt: any) => [opt?._id?.toString(), opt]));
+    const ordered = order.mcq.map((id: string) => map.get(id)).filter(Boolean);
+    const remaining = q.mcq.filter(
+      (opt: any) => !order.mcq!.includes(opt?._id?.toString()),
+    );
+    q.mcq = [...ordered, ...remaining];
+  }
+
+  if (q.type === "DND" && order.dndOptions?.length && q.dnd?.options?.length) {
+    const map = new Map(q.dnd.options.map((opt: any) => [opt?.id, opt]));
+    const ordered = order.dndOptions
+      .map((id: string) => map.get(id))
+      .filter(Boolean);
+    const remaining = q.dnd.options.filter(
+      (opt: any) => !order.dndOptions!.includes(opt?.id),
+    );
+    q.dnd.options = [...ordered, ...remaining];
+  }
+
+  if (q.type === "FIB" && order.fib?.length && Array.isArray(q.fib)) {
+    const map = new Map(q.fib.map((opt: any) => [opt?._id?.toString(), opt]));
+    const ordered = order.fib.map((id: string) => map.get(id)).filter(Boolean);
+    const remaining = q.fib.filter(
+      (opt: any) => !order.fib!.includes(opt?._id?.toString()),
+    );
+    q.fib = [...ordered, ...remaining];
+  }
+
+  return q;
+};
 export const getUserCourses = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?._id;
@@ -733,7 +786,7 @@ export const userHome = async (req: Request, res: Response) => {
     );
 
     /* ---------------- RESPONSE (UNCHANGED) ---------------- */
-    
+
     return OK(
       res,
       {
@@ -818,7 +871,12 @@ export const adminUpdateUser = async (req: Request, res: Response) => {
       user.password = await bcrypt.hash(plain, 10);
 
       // Send email to user with new password
-      await sendLoginCredentials(user.email, plain, user.firstname || "there","user");
+      await sendLoginCredentials(
+        user.email,
+        plain,
+        user.firstname || "there",
+        "user",
+      );
     }
 
     await user.save();
@@ -974,12 +1032,13 @@ export const usersLessonsAndVideos = async (req: Request, res: Response) => {
         .sort({ purchaseAmount: -1 })
         .populate("planId")
         .lean()
-        .then((purchases: any[]) =>
-          purchases.find(
-            (purchase) =>
-              purchase.purchasedProduct?.toString() === id.toString() ||
-              purchase.planId?.courseId?.toString() === id.toString(),
-          ) || null,
+        .then(
+          (purchases: any[]) =>
+            purchases.find(
+              (purchase) =>
+                purchase.purchasedProduct?.toString() === id.toString() ||
+                purchase.planId?.courseId?.toString() === id.toString(),
+            ) || null,
         ) as any,
 
       PurchaseModel.find({
@@ -1564,19 +1623,22 @@ export const usersDomainsAndTasks = async (req: Request, res: Response) => {
           endDate: { $gte: new Date() },
           status: "SUCCESS",
           $or: [
-            { purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] } },
+            {
+              purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] },
+            },
             { type: "SUBSCRIPTION", planId: { $ne: null } },
           ],
         })
           .sort({ purchaseAmount: -1 })
           .populate("planId")
           .lean()
-          .then((purchases: any[]) =>
-            purchases.find(
-              (purchase) =>
-                purchase.purchasedProduct?.toString() === id.toString() ||
-                purchase.planId?.courseId?.toString() === id.toString(),
-            ) || null,
+          .then(
+            (purchases: any[]) =>
+              purchases.find(
+                (purchase) =>
+                  purchase.purchasedProduct?.toString() === id.toString() ||
+                  purchase.planId?.courseId?.toString() === id.toString(),
+              ) || null,
           ) as any,
 
         PurchaseModel.find({
@@ -1775,19 +1837,22 @@ export const getUserApplicationSupport = async (
           endDate: { $gte: new Date() },
           status: "SUCCESS",
           $or: [
-            { purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] } },
+            {
+              purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] },
+            },
             { type: "SUBSCRIPTION", planId: { $ne: null } },
           ],
         })
           .sort({ purchaseAmount: -1 })
           .populate("planId")
           .lean()
-          .then((purchases: any[]) =>
-            purchases.find(
-              (purchase) =>
-                purchase.purchasedProduct?.toString() === id.toString() ||
-                purchase.planId?.courseId?.toString() === id.toString(),
-            ) || null,
+          .then(
+            (purchases: any[]) =>
+              purchases.find(
+                (purchase) =>
+                  purchase.purchasedProduct?.toString() === id.toString() ||
+                  purchase.planId?.courseId?.toString() === id.toString(),
+              ) || null,
           ) as any,
 
         PurchaseModel.find({
@@ -1835,7 +1900,7 @@ export const getUserApplicationSupport = async (
         } else if (isPurchased) {
           /* ---------- INDIVIDUAL PURCHASE ---------- */
           fileLink = item.fileLink;
-        } 
+        }
         // else if (isFreeTrial || !subscription) {
         //   /* ---------- FREE TRIAL / NO ACCESS ---------- */
         //   if (parentIndex === 0 && itemIndex === 0) {
@@ -1906,19 +1971,22 @@ export const getUserExamStrategy = async (req: Request, res: Response) => {
           endDate: { $gte: new Date() },
           status: "SUCCESS",
           $or: [
-            { purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] } },
+            {
+              purchasedProduct: { $in: [id, new mongoose.Types.ObjectId(id)] },
+            },
             { type: "SUBSCRIPTION", planId: { $ne: null } },
           ],
         })
           .sort({ purchaseAmount: -1 })
           .populate("planId")
           .lean()
-          .then((purchases: any[]) =>
-            purchases.find(
-              (purchase) =>
-                purchase.purchasedProduct?.toString() === id.toString() ||
-                purchase.planId?.courseId?.toString() === id.toString(),
-            ) || null,
+          .then(
+            (purchases: any[]) =>
+              purchases.find(
+                (purchase) =>
+                  purchase.purchasedProduct?.toString() === id.toString() ||
+                  purchase.planId?.courseId?.toString() === id.toString(),
+              ) || null,
           ) as any,
 
         PurchaseModel.find({
@@ -1966,7 +2034,7 @@ export const getUserExamStrategy = async (req: Request, res: Response) => {
             /* ---------- ACCESS CONTROL ---------- */
             if (hasFullAccess || isPurchased) {
               fileLink = item.fileLink;
-            } 
+            }
             // else if (isFreeTrial || !subscription) { //TODO:TEST
             //   if (parentIndex === 0 && itemIndex === 0) {
             //     fileLink = item.fileLink; // preview
@@ -2069,12 +2137,13 @@ export const getUserFlashcardCategory = async (req: Request, res: Response) => {
         .sort({ purchaseAmount: -1 })
         .populate("planId")
         .lean()
-        .then((purchases: any[]) =>
-          purchases.find(
-            (purchase) =>
-              purchase.purchasedProduct?.toString() === courseId.toString() ||
-              purchase.planId?.courseId?.toString() === courseId.toString(),
-          ) || null,
+        .then(
+          (purchases: any[]) =>
+            purchases.find(
+              (purchase) =>
+                purchase.purchasedProduct?.toString() === courseId.toString() ||
+                purchase.planId?.courseId?.toString() === courseId.toString(),
+            ) || null,
         ) as any,
 
       PurchaseModel.find({
@@ -2299,7 +2368,7 @@ export const getPracticeExamQuestions = async (req: Request, res: Response) => {
           status: "ACTIVE",
           isPractice: true,
         },
-      }
+      },
     ]);
 
     if (!questions.length) {
@@ -2797,8 +2866,8 @@ export const getUserMockExam = async (req: Request, res: Response) => {
       .lean();
 
     // Filter paused exams to only include those from the requested course
-    pausedExams = pausedExams.filter((exam: any) =>
-      exam.mockExamId?.courseId?.toString() === id
+    pausedExams = pausedExams.filter(
+      (exam: any) => exam.mockExamId?.courseId?.toString() === id,
     );
 
     pausedExams = pausedExams.map((exam: any) => {
@@ -3240,6 +3309,7 @@ export const getUserMockExamQuestions = async (req: Request, res: Response) => {
         return true;
       });
     };
+
     const fetchAllowedQuestions = async (
       size: number,
       excludedQuestionIds: mongoose.Types.ObjectId[] = [],
@@ -3264,6 +3334,68 @@ export const getUserMockExamQuestions = async (req: Request, res: Response) => {
     };
 
     /* ---------------------------------- */
+    /* 🔀 Option-order snapshot helpers   */
+    /* ---------------------------------- */
+
+    const captureOptionOrder = (q: any) => {
+      const order: { mcq?: string[]; dndOptions?: string[]; fib?: string[] } = {};
+
+      if (q.type === "MCQ" && Array.isArray(q.mcq)) {
+        order.mcq = q.mcq
+          .map((opt: any) => opt?._id?.toString())
+          .filter(Boolean);
+      }
+      if (q.type === "DND" && q.dnd?.options?.length) {
+        order.dndOptions = q.dnd.options
+          .map((opt: any) => opt?.id)
+          .filter(Boolean);
+      }
+      if (q.type === "FIB" && Array.isArray(q.fib)) {
+        order.fib = q.fib
+          .map((opt: any) => opt?._id?.toString())
+          .filter(Boolean);
+      }
+
+      return order;
+    };
+
+    const applyOptionOrder = (
+      q: any,
+      order?: { mcq?: string[]; dndOptions?: string[]; fib?: string[] },
+    ) => {
+      if (!order) return q;
+
+      if (q.type === "MCQ" && order.mcq?.length && Array.isArray(q.mcq)) {
+        const map = new Map(q.mcq.map((opt: any) => [opt?._id?.toString(), opt]));
+        const ordered = order.mcq.map((id: string) => map.get(id)).filter(Boolean);
+        const remaining = q.mcq.filter(
+          (opt: any) => !order.mcq!.includes(opt?._id?.toString()),
+        );
+        q.mcq = [...ordered, ...remaining];
+      }
+
+      if (q.type === "DND" && order.dndOptions?.length && q.dnd?.options?.length) {
+        const map = new Map(q.dnd.options.map((opt: any) => [opt?.id, opt]));
+        const ordered = order.dndOptions.map((id: string) => map.get(id)).filter(Boolean);
+        const remaining = q.dnd.options.filter(
+          (opt: any) => !order.dndOptions!.includes(opt?.id),
+        );
+        q.dnd.options = [...ordered, ...remaining];
+      }
+
+      if (q.type === "FIB" && order.fib?.length && Array.isArray(q.fib)) {
+        const map = new Map(q.fib.map((opt: any) => [opt?._id?.toString(), opt]));
+        const ordered = order.fib.map((id: string) => map.get(id)).filter(Boolean);
+        const remaining = q.fib.filter(
+          (opt: any) => !order.fib!.includes(opt?._id?.toString()),
+        );
+        q.fib = [...ordered, ...remaining];
+      }
+
+      return q;
+    };
+
+    /* ---------------------------------- */
     /* 🔁 PAUSED FLOW (NO DEDUCTION) */
     /* ---------------------------------- */
 
@@ -3285,7 +3417,7 @@ export const getUserMockExamQuestions = async (req: Request, res: Response) => {
       const examQuestions = await MockExamQuestionModel.find({
         examId: examObjectId,
       })
-        .sort({ createdAt: 1 })
+        .sort({ sequence: 1 })
         .lean();
 
       const questionIds = [
@@ -3311,20 +3443,16 @@ export const getUserMockExamQuestions = async (req: Request, res: Response) => {
 
       const formattedQuestions = questions.map((q: any) => {
         const attempt = attemptMap.get(q?._id?.toString());
-
-        if (q?.type === "MCQ" && q.mcq?.length) q.mcq = shuffleArray(q.mcq);
-
-        if (q?.type === "DND" && q.dnd?.options?.length)
-          q.dnd.options = shuffleArray(q.dnd.options);
-
-        if (q?.type === "FIB" && q.fib?.length) q.fib = shuffleArray(q.fib);
+        const orderedQuestion = applyOptionOrder(q, attempt?.optionOrder);
 
         return {
-          ...q,
+          ...orderedQuestion,
           isAttempted: attempt?.isAttempted ?? false,
           answerJson: attempt?.answerJson ?? null,
           isCorrect: attempt?.isCorrect ?? null,
-          image: q?.image ? getFileUrlUser(q.image) : null,
+          image: orderedQuestion?.image
+            ? getFileUrlUser(orderedQuestion.image)
+            : null,
         };
       });
 
@@ -3504,10 +3632,12 @@ export const getUserMockExamQuestions = async (req: Request, res: Response) => {
     /* ---------------------------------- */
 
     await MockExamQuestionModel.insertMany(
-      formattedQuestions.map((q: any) => ({
+      formattedQuestions.map((q: any, index: number) => ({
         examId: newExam._id,
         questionId: q._id,
         isCorrect: null,
+        sequence: index,
+        optionOrder: captureOptionOrder(q),
       })),
     );
 
@@ -3891,8 +4021,8 @@ export const reportAProblem = async (req: Request, res: Response) => {
     });
 
     const ownerEmail =
-    process.env.ADMIN_RESEND_GMAIL_ACCOUNT ||
-    process.env.COMPANY_RESEND_GMAIL_ACCOUNT;
+      process.env.ADMIN_RESEND_GMAIL_ACCOUNT ||
+      process.env.COMPANY_RESEND_GMAIL_ACCOUNT;
     if (ownerEmail) {
       const reporterName =
         reporterDetails?.fullName?.trim() ||
@@ -4155,14 +4285,14 @@ export const updateProfile = async (req: Request, res: Response) => {
   }
 };
 
-export const deleteProfileImage = async(req: Request, res: Response) => {
+export const deleteProfileImage = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?._id;
     const user = await UserModel.findById(userId);
     if (!user) {
       return BADREQUEST(res, "User not found");
     }
-    if(!user.image) {
+    if (!user.image) {
       return BADREQUEST(res, "No profile image to delete");
     }
     await deleteFileFromS3(user?.image);
@@ -4635,49 +4765,35 @@ export const getUsers = async (req: Request, res: Response) => {
       sortOrder = "desc",
     } = req.query;
 
-
     const pageNumber = Math.max(Number(page), 1);
     const pageSize = Math.max(Number(limit), 1);
     const skip = (pageNumber - 1) * pageSize;
 
-
     let sortQuery: any = {};
-
 
     // Mapping frontend fields with database fields
     switch (sortBy) {
-
       case "name":
         sortQuery.fullName = sortOrder === "desc" ? -1 : 1;
         break;
-
 
       case "email":
         sortQuery.email = sortOrder === "desc" ? -1 : 1;
         break;
 
-
       case "startDate":
         sortQuery.createdAt = sortOrder === "desc" ? -1 : 1;
         break;
 
-
       case "channel":
-        sortQuery["fcmToken.deviceType"] =
-          sortOrder === "desc" ? -1 : 1;
+        sortQuery["fcmToken.deviceType"] = sortOrder === "desc" ? -1 : 1;
         break;
 
-
       default:
-        sortQuery[sortBy as string] =
-          sortOrder === "desc" ? -1 : 1;
-
+        sortQuery[sortBy as string] = sortOrder === "desc" ? -1 : 1;
     }
 
-
-
     let query: any = {};
-
 
     if (search && (search as string).trim() !== "") {
       query = {
@@ -4685,37 +4801,36 @@ export const getUsers = async (req: Request, res: Response) => {
           {
             firstname: {
               $regex: search,
-              $options: "i"
-            }
+              $options: "i",
+            },
           },
           {
             lastname: {
               $regex: search,
-              $options: "i"
-            }
+              $options: "i",
+            },
           },
           {
             fullName: {
               $regex: search,
-              $options: "i"
-            }
+              $options: "i",
+            },
           },
           {
             email: {
               $regex: search,
-              $options: "i"
-            }
+              $options: "i",
+            },
           },
           {
             phoneNumber: {
               $regex: search,
-              $options: "i"
-            }
+              $options: "i",
+            },
           },
         ],
       };
     }
-
 
     const userQuery = {
       role: "USER",
@@ -4723,36 +4838,28 @@ export const getUsers = async (req: Request, res: Response) => {
       ...query,
     };
 
-
     const [data, totalData] = await Promise.all([
-
       UserModel.find(userQuery)
         .sort(sortQuery)
         .skip(skip)
         .limit(pageSize)
         .lean(),
 
-
-      UserModel.countDocuments(userQuery)
-
+      UserModel.countDocuments(userQuery),
     ]);
-
-
 
     return OK(
       res,
       {
         data: data.map((val) => {
-
           if (val.image) {
             return {
               ...val,
-              image: getFileUrl(val.image)
+              image: getFileUrl(val.image),
             };
           }
 
           return val;
-
         }),
 
         pagination: {
@@ -4761,22 +4868,15 @@ export const getUsers = async (req: Request, res: Response) => {
           limit: pageSize,
           totalPages: Math.ceil(totalData / pageSize),
         },
-
       },
       "Users fetched successfully",
     );
-
-
   } catch (err: any) {
-
     if (err.message) {
       return BADREQUEST(res, err.message);
     }
 
-    return INTERNAL_SERVER_ERROR(
-      res,
-      "Internal Server Error"
-    );
+    return INTERNAL_SERVER_ERROR(res, "Internal Server Error");
   }
 };
 // export const getUsers = async (req: Request, res: Response) => {
@@ -4892,7 +4992,6 @@ export const getUserById = async (req: Request, res: Response) => {
           foreignField: "_id",
           as: "exam",
         },
-
       },
       { $unwind: "$exam" },
 
@@ -4975,10 +5074,14 @@ export const getUserById = async (req: Request, res: Response) => {
           remarks: 1,
           overallPercentage: 1,
           timeTaken: 1,
-          exam: {_id: "$exam _id", name: "$exam.name",remarks: "$exam.remarks"},
+          exam: {
+            _id: "$exam _id",
+            name: "$exam.name",
+            remarks: "$exam.remarks",
+          },
           userName: "$user.fullName",
           examName: "$exam.name",
-          courseName: "$course.name", 
+          courseName: "$course.name",
           completedAt: 1,
           domainSummary: 1,
         },
@@ -5418,7 +5521,8 @@ export const getUserById = async (req: Request, res: Response) => {
         exam: {
           _id: item?.mockExamId?._id || null,
           name: item?.mockExamId?.name || null,
-          remarks: item?.mockExamId?.remarks || null,     },
+          remarks: item?.mockExamId?.remarks || null,
+        },
         completedAt: item?.completedAt || null,
       }));
 
@@ -6049,12 +6153,12 @@ export const addAccess = async (req: Request, res: Response) => {
     if (type === "COURSE" && planId) {
       for (purchasedProduct of purchasedProduct) {
         // const data = await findObject[type];
-        const data = await PlanModel.findOne({
+        const data = (await PlanModel.findOne({
           _id: purchasedProduct,
           status: "ACTIVE",
         })
           .select("_id stripePrice")
-          .lean() as any;
+          .lean()) as any;
         if (!data) {
           throw new Error("Invalid plan id");
         }
