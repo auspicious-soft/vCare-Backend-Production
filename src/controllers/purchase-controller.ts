@@ -414,11 +414,16 @@ export const afterSubscriptionCreatedService = async (
         { paymentIntentId: paymentIntent.id },
         { status: "FAILED" },
       )
-        .populate("userId", "fullName email")
+        .populate("userId", "fullName firstname lastname email")
         .populate("planId", "planName")
         .lean();
 
       const failedUser = failedPurchase?.userId as any;
+      const fullName =
+        failedUser?.fullName ||
+        `${failedUser?.firstname || ""} ${failedUser?.lastname || ""}`.trim() ||
+        paymentIntent.metadata?.fullName ||
+        paymentIntent.metadata?.userName;
       if (failedUser?.email) {
         const amountValue =
           typeof paymentIntent.amount === "number"
@@ -428,7 +433,7 @@ export const afterSubscriptionCreatedService = async (
 
         await sendPaymentFailedEmail({
           email: failedUser.email,
-          fullName: failedUser.fullName,
+          ...(fullName ? { fullName } : {}),
           subscriptionName: (failedPurchase?.planId as any)?.planName,
           ...(amountValue
             ? {
@@ -447,6 +452,7 @@ export const afterSubscriptionCreatedService = async (
 
         await sendPaymentFailedEmail({
           email: paymentIntent.receipt_email,
+          ...(fullName ? { fullName } : {}),
           ...(amountValue
             ? {
                 paymentAmount: currency
@@ -1012,6 +1018,12 @@ export const getAllPurchases = async (req: Request, res: Response) => {
       return BADREQUEST(res, "Invalid filter");
     }
 
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return BADREQUEST(res, "Invalid courseId");
+    }
+
+    const courseObjectId = new mongoose.Types.ObjectId(courseId);
+
     const searchText =
       typeof search === "string" ? search.trim().toLowerCase() : "";
 
@@ -1029,9 +1041,15 @@ export const getAllPurchases = async (req: Request, res: Response) => {
 
     if (filter === "SUBSCRIPTION" || filter === "FREE_TRIAL") {
       matchStage.type = filter;
-      matchStage.purchasedProduct = {
-        $in: [courseId, new mongoose.Types.ObjectId(courseId)],
-      };
+
+      const coursePlans = await PlanModel.find({ courseId: courseObjectId })
+        .select("_id")
+        .lean();
+
+      matchStage.$or = [
+        { purchasedProduct: { $in: [courseId, courseObjectId] } },
+        { planId: { $in: coursePlans.map((plan) => plan._id) } },
+      ];
     } else {
       matchStage.type = "INDIVIDUAL";
     }
@@ -1052,7 +1070,7 @@ export const getAllPurchases = async (req: Request, res: Response) => {
 
     const purchases = await PurchaseModel.find(matchStage)
       .populate("userId", "fullName email")
-      .populate("planId", "planName")
+      .populate("planId", "planName courseName courseId")
       .sort({ purchaseAmount: -1 })
       .lean();
 
@@ -1108,8 +1126,13 @@ export const getAllPurchases = async (req: Request, res: Response) => {
       const finalData = purchases.map((item: any) => ({
         ...item,
         planName: item?.planId?.planName || "-",
-        courseName: courseData?.name || "N/A",
-        purchasedItem: courseData?.name || "N/A",
+        courseName:
+          courseData?.name || item?.planId?.courseName || "N/A",
+        purchasedItem:
+          courseData?.name ||
+          item?.planId?.courseName ||
+          item?.planId?.planName ||
+          "N/A",
       }));
 
       return buildResponse(finalData);
