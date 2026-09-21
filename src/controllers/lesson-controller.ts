@@ -460,7 +460,7 @@ export const updateLesson = async (req: Request, res: Response) => {
       price,
     } = req.body;
 
-    if (!id || !module || !price) {
+    if (!id || !module) {
       throw new Error("lesson id, module name & price is required");
     }
 
