@@ -423,7 +423,21 @@ export const afterSubscriptionCreatedService = async (
         failedUser?.fullName ||
         `${failedUser?.firstname || ""} ${failedUser?.lastname || ""}`.trim() ||
         paymentIntent.metadata?.fullName ||
-        paymentIntent.metadata?.userName;
+        paymentIntent.metadata?.userName ||
+        "User";
+
+      const planName =
+        (failedPurchase?.planId as any)?.planName ||
+        paymentIntent.metadata?.planName ||
+        (failedPurchase?.planId
+          ? (
+              await PlanModel.findById(failedPurchase.planId)
+                .select("planName")
+                .lean()
+            )?.planName
+          : undefined) ||
+        undefined;
+
       if (failedUser?.email) {
         const amountValue =
           typeof paymentIntent.amount === "number"
@@ -433,8 +447,8 @@ export const afterSubscriptionCreatedService = async (
 
         await sendPaymentFailedEmail({
           email: failedUser.email,
-          ...(fullName ? { fullName } : {}),
-          subscriptionName: (failedPurchase?.planId as any)?.planName,
+          fullName,
+          ...(planName ? { subscriptionName: planName } : {}),
           ...(amountValue
             ? {
                 paymentAmount: currency
@@ -452,7 +466,8 @@ export const afterSubscriptionCreatedService = async (
 
         await sendPaymentFailedEmail({
           email: paymentIntent.receipt_email,
-          ...(fullName ? { fullName } : {}),
+          fullName,
+          ...(planName ? { subscriptionName: planName } : {}),
           ...(amountValue
             ? {
                 paymentAmount: currency
@@ -499,7 +514,11 @@ export const afterSubscriptionCreatedService = async (
 
       const failedEmail =
         session.customer_details?.email || session.customer_email || undefined;
-      const failedFullName = session.customer_details?.name || undefined;
+      const failedFullName =
+        session.customer_details?.name ||
+        session.metadata?.fullName ||
+        session.metadata?.userName ||
+        "User";
       const amountValue =
         typeof session.amount_total === "number"
           ? (session.amount_total / 100).toFixed(2)
@@ -510,14 +529,14 @@ export const afterSubscriptionCreatedService = async (
             .select("planName")
             .lean()
         : null;
+      const planName =
+        planData?.planName || session.metadata?.planName || undefined;
 
       if (failedEmail) {
         await sendPaymentFailedEmail({
           email: failedEmail,
-          ...(failedFullName ? { fullName: failedFullName } : {}),
-          ...(planData?.planName
-            ? { subscriptionName: planData.planName }
-            : {}),
+          fullName: failedFullName,
+          ...(planName ? { subscriptionName: planName } : {}),
           ...(amountValue
             ? {
                 paymentAmount: currency

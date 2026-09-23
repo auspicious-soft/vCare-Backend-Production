@@ -456,12 +456,14 @@ export const sendPaymentFailedEmail = async (payload: {
   supportUrl?: string;
 }) => {
   try {
+    const normalizedFullName = payload.fullName?.trim() || "User";
+
     const result = await resend.emails.send({
       from: process.env.COMPANY_RESEND_GMAIL_ACCOUNT as string,
       to: payload.email,
       subject: "Payment Unsuccessful - Action Required",
       react: await PaymentFailedEmail({
-        ...(payload.fullName ? { fullName: payload.fullName } : {}),
+        fullName: normalizedFullName,
         ...(payload.subscriptionName
           ? { subscriptionName: payload.subscriptionName }
           : {}),

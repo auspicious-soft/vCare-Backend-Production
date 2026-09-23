@@ -5612,10 +5612,29 @@ export const getUserById = async (req: Request, res: Response) => {
         _id: { $in: productIds },
       });
 
+      const planIds = subscriptions
+        .map((item: any) => item?.planId?._id || item?.planId)
+        .filter(Boolean);
+
+      const planDocs = planIds.length
+        ? await PlanModel.find({ _id: { $in: planIds } })
+            .select("_id courseId courseName")
+            .populate("courseId", "name")
+            .lean()
+        : [];
+
       // ✅ Create map
       const productMap = new Map();
       products.forEach((p: any) => {
         productMap.set(p._id.toString(), p);
+      });
+
+      const planMap = new Map();
+      planDocs.forEach((plan: any) => {
+        planMap.set(plan._id.toString(), plan);
+        if (plan.courseId?._id) {
+          productMap.set(plan.courseId._id.toString(), plan.courseId);
+        }
       });
 
       // ✅ Active Since
@@ -5637,11 +5656,19 @@ export const getUserById = async (req: Request, res: Response) => {
         }
 
         const product = productMap.get(productId);
+        const plan = item?.planId ? planMap.get(item.planId._id.toString()) : null;
+        const courseName =
+          product?.name ||
+          product?.courseName ||
+          plan?.courseName ||
+          item?.planId?.courseName ||
+          plan?.courseId?.name ||
+          null;
 
         return {
           subscriptionId: item._id,
           planName: item?.planId?.planName || null,
-          courseName: product?.name || null,
+          courseName,
           purchaseDate: item.purchaseDate,
           endDate: item.endDate,
         };
