@@ -87,7 +87,7 @@ app.use(
 		// credentials: true,
 	}),
 );
-
+ 
 var dir = path.join(__dirname, "static");
 app.use(express.static(dir));
 
