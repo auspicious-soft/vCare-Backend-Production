@@ -5674,9 +5674,40 @@ export const getUserById = async (req: Request, res: Response) => {
         };
       });
 
+      const deduplicateSubscriptionsByCourse = (items: any[]) => {
+        const uniqueMap = new Map<string, any>();
+
+        items.forEach((item) => {
+          const key =
+            item?.courseName ||
+            item?.subscriptionId?.toString() ||
+            item?.planName ||
+            item?.purchaseDate?.toISOString?.() ||
+            "unknown";
+
+          const existing = uniqueMap.get(key);
+          if (!existing) {
+            uniqueMap.set(key, item);
+            return;
+          }
+
+          if (
+            new Date(item?.purchaseDate || 0).getTime() >=
+            new Date(existing?.purchaseDate || 0).getTime()
+          ) {
+            uniqueMap.set(key, item);
+          }
+        });
+
+        return Array.from(uniqueMap.values());
+      };
+
+      const deduplicatedSubscriptionResult =
+        deduplicateSubscriptionsByCourse(subscriptionResult);
+
       const subscriptionDetails = {
         activeSince,
-        subscriptions: subscriptionResult,
+        subscriptions: deduplicatedSubscriptionResult,
       };
       const getDailyCounts = async (Model: any, match: any = {}) => {
         return Model.aggregate([
@@ -5753,7 +5784,7 @@ export const getUserById = async (req: Request, res: Response) => {
 
         courseProgress, // ✅ FILLED
         recentExamActivity: formattedExams,
-        coursesEnrolled: subscriptionResult || [],
+        coursesEnrolled: deduplicatedSubscriptionResult || [],
         subscriptionDetails: subscriptionDetails || [],
         activityGraph,
       };

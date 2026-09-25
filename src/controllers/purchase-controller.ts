@@ -1058,8 +1058,8 @@ export const getAllPurchases = async (req: Request, res: Response) => {
     /* ✅ FILTER */
     /* -------------------------------------------------- */
 
-    if (filter === "SUBSCRIPTION" || filter === "FREE_TRIAL") {
-      matchStage.type = filter;
+    if (filter === "SUBSCRIPTION") {
+      matchStage.type = "SUBSCRIPTION";
 
       const coursePlans = await PlanModel.find({ courseId: courseObjectId })
         .select("_id")
@@ -1068,6 +1068,25 @@ export const getAllPurchases = async (req: Request, res: Response) => {
       matchStage.$or = [
         { purchasedProduct: { $in: [courseId, courseObjectId] } },
         { planId: { $in: coursePlans.map((plan) => plan._id) } },
+      ];
+    } else if (filter === "FREE_TRIAL") {
+      const coursePlans = await PlanModel.find({ courseId: courseObjectId })
+        .select("_id")
+        .lean();
+
+      matchStage.$and = [
+        {
+          $or: [
+            { type: "FREE_TRIAL" },
+            { type: "SUBSCRIPTION", purchaseAmount: 0 },
+          ],
+        },
+        {
+          $or: [
+            { purchasedProduct: { $in: [courseId, courseObjectId] } },
+            { planId: { $in: coursePlans.map((plan) => plan._id) } },
+          ],
+        },
       ];
     } else {
       matchStage.type = "INDIVIDUAL";
@@ -1264,12 +1283,25 @@ export const exportPurchasesCSV = async (req: Request, res: Response) => {
 
     const matchStage: any = {};
 
-    if (filter === "SUBSCRIPTION" || filter === "FREE_TRIAL") {
-      matchStage.type = filter;
-
+    if (filter === "SUBSCRIPTION") {
+      matchStage.type = "SUBSCRIPTION";
       matchStage.purchasedProduct = {
         $in: [courseId, new mongoose.Types.ObjectId(courseId)],
       };
+    } else if (filter === "FREE_TRIAL") {
+      matchStage.$and = [
+        {
+          $or: [
+            { type: "FREE_TRIAL" },
+            { type: "SUBSCRIPTION", purchaseAmount: 0 },
+          ],
+        },
+        {
+          purchasedProduct: {
+            $in: [courseId, new mongoose.Types.ObjectId(courseId)],
+          },
+        },
+      ];
     } else {
       matchStage.type = "INDIVIDUAL";
     }
