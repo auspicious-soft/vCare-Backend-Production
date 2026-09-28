@@ -634,6 +634,46 @@ export const downloadTaskQuestionSampleCSV = async (
   }
 };
 
+const normalizeCsvRow = (row: Record<string, any>) => {
+  const normalized: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(row)) {
+    const cleanKey = String(key ?? "")
+      .replace(/^\ufeff/, "")
+      .trim()
+      .toLowerCase();
+
+    const cleanValue =
+      value === undefined || value === null ? "" : String(value).trim();
+
+    normalized[cleanKey] = cleanValue;
+  }
+
+  return {
+    domainName:
+      normalized.domainname ||
+      normalized["domain name"] ||
+      normalized["domain_name"],
+    domainPrice:
+      normalized.domainprice ||
+      normalized["domain price"] ||
+      normalized["domain_price"] ||
+      normalized.price,
+    taskName:
+      normalized.taskname || normalized["task name"] || normalized["task_name"],
+    taskLabel:
+      normalized.tasklabel ||
+      normalized["task label"] ||
+      normalized["task_label"],
+    taskDetails:
+      normalized.taskdetails ||
+      normalized["task details"] ||
+      normalized["task_details"],
+    examples: normalized.examples || normalized["task example"],
+    keywords: normalized.keywords || normalized["task keywords"],
+  };
+};
+
 export const bulkUploadTaskQuestions = async (req: Request, res: Response) => {
   const session = await mongoose.startSession();
 
@@ -664,8 +704,14 @@ export const bulkUploadTaskQuestions = async (req: Request, res: Response) => {
 
       await new Promise<void>((resolve, reject) => {
         Readable.from(file.buffer)
-          .pipe(csv())
-          .on("data", (row) => rows.push(row))
+          .pipe(
+            csv({
+              mapHeaders: ({ header }) =>
+                String(header ?? "").replace(/^\ufeff/, "").trim(),
+              skipEmptyLines: true,
+            }),
+          )
+          .on("data", (row) => rows.push(normalizeCsvRow(row)))
           .on("end", resolve)
           .on("error", reject);
       });
@@ -699,27 +745,34 @@ export const bulkUploadTaskQuestions = async (req: Request, res: Response) => {
           keywords,
         } = row;
 
+        const sanitizedDomainName = String(domainName ?? "").trim();
+        const sanitizedTaskName = String(taskName ?? "").trim();
+        const sanitizedTaskLabel = String(taskLabel ?? "").trim();
+        const sanitizedTaskDetails = String(taskDetails ?? "").trim();
+        const sanitizedExamples = String(examples ?? "").trim();
+        const sanitizedKeywords = String(keywords ?? "").trim();
+        const sanitizedDomainPrice = String(domainPrice ?? "").trim();
+
         if (
-          !domainName ||
-          !taskName ||
-          !taskLabel ||
-          !taskDetails ||
-          !examples ||
-          !keywords ||
-          domainPrice === undefined ||
-          domainPrice === null
+          !sanitizedDomainName ||
+          !sanitizedTaskName ||
+          !sanitizedTaskLabel ||
+          !sanitizedTaskDetails ||
+          !sanitizedExamples ||
+          !sanitizedKeywords ||
+          sanitizedDomainPrice === ""
         ) {
           throw new Error(
             `Missing required fields: domainName, price, taskName, taskLabel, taskDetails, examples, keywords`,
           );
         }
 
-        const parsedPrice = Number(domainPrice);
+        const parsedPrice = Number(sanitizedDomainPrice);
         if (Number.isNaN(parsedPrice)) {
-          throw new Error(`Invalid price value for domain ${domainName}`);
+          throw new Error(`Invalid price value for domain ${sanitizedDomainName}`);
         }
 
-        const key = `${domainName}|${taskName}`;
+        const key = `${sanitizedDomainName}|${sanitizedTaskName}`;
 
         if (!grouped.has(key)) {
           grouped.set(key, {
@@ -746,10 +799,17 @@ export const bulkUploadTaskQuestions = async (req: Request, res: Response) => {
           keywords,
         } = groupData;
 
+        const safeDomainName = String(domainName ?? "").trim();
+        const safeTaskName = String(taskName ?? "").trim();
+        const safeTaskLabel = String(taskLabel ?? "").trim();
+        const safeTaskDetails = String(taskDetails ?? "").trim();
+        const safeExamples = String(examples ?? "").trim();
+        const safeKeywords = String(keywords ?? "").trim();
+
         // Check or create domain
         let domain: any = await DomainModel.findOne({
           courseId,
-          domain: domainName,
+          domain: safeDomainName,
           status: { $ne: "DELETED" },
         }).session(session);
 
@@ -763,7 +823,7 @@ export const bulkUploadTaskQuestions = async (req: Request, res: Response) => {
             [
               {
                 courseId,
-                domain: domainName,
+                domain: safeDomainName,
                 order: domainCount + 1,
                 price: domainPrice,
                 status: "ACTIVE",
@@ -788,7 +848,7 @@ export const bulkUploadTaskQuestions = async (req: Request, res: Response) => {
         // Check or create task
         let task: any = await TaskModel.findOne({
           domainId: domain._id,
-          taskName,
+          taskName: safeTaskName,
           status: { $ne: "DELETED" },
         }).session(session);
 
@@ -802,11 +862,11 @@ export const bulkUploadTaskQuestions = async (req: Request, res: Response) => {
             [
               {
                 domainId: domain._id,
-                taskName,
-                taskLabel,
-                taskDetails,
-                examples,
-                keywords,
+                taskName: safeTaskName,
+                taskLabel: safeTaskLabel,
+                taskDetails: safeTaskDetails,
+                examples: safeExamples,
+                keywords: safeKeywords,
                 order: taskCount + 1,
                 status: "ACTIVE",
               },
@@ -823,10 +883,10 @@ export const bulkUploadTaskQuestions = async (req: Request, res: Response) => {
           task = await TaskModel.findByIdAndUpdate(
             task._id,
             {
-              taskLabel,
-              taskDetails,
-              examples,
-              keywords,
+              taskLabel: safeTaskLabel,
+              taskDetails: safeTaskDetails,
+              examples: safeExamples,
+              keywords: safeKeywords,
             },
             { new: true, session },
           );
