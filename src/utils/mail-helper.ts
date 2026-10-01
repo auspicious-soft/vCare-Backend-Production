@@ -507,7 +507,6 @@ export const sendEnquiryEmail = async ({
     from: process.env.COMPANY_RESEND_GMAIL_ACCOUNT!,
     to: [
      "support@vcareprojectmanagement.com",
-      "team@vcareprojectmanagement.com",
     ],
     subject: emailSubject,
     react: await WebsiteEnquiryEmail({

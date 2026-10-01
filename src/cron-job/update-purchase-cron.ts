@@ -7,11 +7,59 @@ import {
 import { NotificationModel } from "../models/notification-schema.js";
 import { NotificationService } from "../config/fcm.js";
 import mongoose from "mongoose";
+import { UserModel } from "../models/user-schema.js";
+import { LessonModel } from "../models/lessons-schema.js";
+import { DomainModel } from "../models/domains-schema.js";
+import { ApplicationSupportModel } from "../models/application-support-schema.js";
+import { ExamStrategyModel } from "../models/exam-strategy-schema.js";
+import { PracticeExamModel } from "../models/practice-exam-schema.js";
+import { MockExamModel } from "../models/mock-exam-schema.js";
+import { FlashCardCategoryModel } from "../models/flash-card-category-schema.js";
 
 let isReminderCronRunning = false;
 let isNotificationCronRunning = false;
 let isNotificationGarbageCollectionRunning = false;
- 
+
+// Individual purchases have no planId; resolve the item name from purchasedProduct instead.
+const individualProductLookup: Record<string, { model: any; nameField: string }> = {
+  LESSONS: { model: LessonModel, nameField: "module" },
+  DOMAIN_TASK: { model: DomainModel, nameField: "domain" },
+  PRACTICE_TEST: { model: PracticeExamModel, nameField: "name" },
+  MOCK_EXAM: { model: MockExamModel, nameField: "name" },
+  EXAM_STRATEGY: { model: ExamStrategyModel, nameField: "name" },
+  APPLICATION_SUPPORT: { model: ApplicationSupportModel, nameField: "name" },
+  FLASH_CARDS: { model: FlashCardCategoryModel, nameField: "categoryName" },
+};
+
+const getPurchaseDisplayName = async (purchase: any): Promise<string> => {
+  const planData = purchase?.planId;
+  const planLabel = [planData?.courseName, planData?.planName]
+    .filter(Boolean)
+    .join(" - ");
+  if (planLabel) return `the course ${planLabel}`;
+
+  const lookup = individualProductLookup[purchase?.purchaseType];
+  const productId = purchase?.purchasedProduct;
+  if (lookup && productId && mongoose.Types.ObjectId.isValid(String(productId))) {
+    try {
+      const product = await lookup.model
+        .findById(productId)
+        .select(lookup.nameField)
+        .lean();
+      const productName = product?.[lookup.nameField];
+      if (typeof productName === "string" && productName.trim()) {
+        return productName.trim();
+      }
+    } catch (err) {
+      console.error("Failed to resolve purchased product name", err);
+    }
+  }
+
+  return purchase?.type === "FREE_TRIAL"
+    ? "your free trial"
+    : "your subscription plan";
+};
+
 const sendReminderEmail = async (): Promise<void> => {
   try {
     const now = new Date();
@@ -37,13 +85,7 @@ const sendReminderEmail = async (): Promise<void> => {
       const purchaseType =
         (purchase.type as "FREE_TRIAL" | "SUBSCRIPTION" | string) ||
         "SUBSCRIPTION";
-      const planData = purchase.planId as any;
-      const subscriptionName =
-        purchase?.type === "FREE_TRIAL"
-          ? `the course ${planData?.courseName}-${planData?.planName}` ||
-            "Free Trial"
-          : `the course ${planData?.courseName}-${planData?.planName}` ||
-            "your subscription plan";
+      const subscriptionName = await getPurchaseDisplayName(purchase);
 
       await sendPurchaseExpiryReminderEmail({
         email: userData.email,
@@ -75,12 +117,7 @@ export const updateExpiredPurchaseStatus = async (): Promise<void> => {
       const userData = purchase?.userId;
       if (!userData?.email) continue;
 
-      const planName =
-        purchase?.type === "FREE_TRIAL"
-          ? `the course ${purchase?.planId?.courseName}-${purchase?.planId?.planName}` ||
-            "Free Trial"
-          : `the course ${purchase?.planId?.courseName}-${purchase?.planId?.planName}` ||
-            "your subscription plan";
+      const planName = await getPurchaseDisplayName(purchase);
 
       await sendPlanEndedEmail({
         email: userData.email,
@@ -99,6 +136,57 @@ export const updateExpiredPurchaseStatus = async (): Promise<void> => {
     console.error("Expiry update cron error", err);
   }
 };
+
+// ---------- TEMP TEST: remove after verifying the reminder email ----------
+// Sends ONE "Your Access Plan is Ending Soon" email per minute, only to the test
+// user, alternating between their subscription and an individual purchase.
+// const REMINDER_TEST_EMAIL = "vtest292@gmail.com";
+// let reminderTestRun = 0;
+
+// const sendReminderEmailTest = async (): Promise<void> => {
+//   try {
+//     const user: any = await UserModel.findOne({ email: REMINDER_TEST_EMAIL })
+//       .select("fullName email")
+//       .lean();
+//     if (!user) {
+//       console.warn(`[reminder-test] user ${REMINDER_TEST_EMAIL} not found`);
+//       return;
+//     }
+
+//     const purchaseKind = reminderTestRun++ % 2 === 0 ? "SUBSCRIPTION" : "INDIVIDUAL";
+//     const purchase: any = await PurchaseModel.findOne({
+//       userId: user._id,
+//       status: "SUCCESS",
+//       type: purchaseKind,
+//       endDate: { $gte: new Date() },
+//     })
+//       .sort({ endDate: 1 })
+//       .populate("planId", "planName courseName")
+//       .lean();
+//     if (!purchase) {
+//       console.warn(`[reminder-test] no active ${purchaseKind} purchase for test user`);
+//       return;
+//     }
+
+//     const subscriptionName = await getPurchaseDisplayName(purchase);
+//     await sendPurchaseExpiryReminderEmail({
+//       email: user.email,
+//       name: user.fullName,
+//       type: purchase.type,
+//       endDate: purchase.endDate,
+//       subscriptionName,
+//     });
+//     console.log(
+//       `[reminder-test] sent to ${user.email} (${purchaseKind}/${purchase.purchaseType}): "${subscriptionName}"`,
+//     );
+//   } catch (err) {
+//     console.error("[reminder-test] error", err);
+//   }
+// };
+
+// export const reminderEmailTestCron = (): ScheduledTask =>
+//   cron.schedule("* * * * *", sendReminderEmailTest);
+// ---------- END TEMP TEST ----------
 
 export const startReminderAndUpdateCronJob = (): ScheduledTask => {
   const cronExpression = "0 0 * * *";

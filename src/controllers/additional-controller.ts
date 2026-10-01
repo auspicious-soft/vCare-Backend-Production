@@ -22,7 +22,10 @@ import { NavigationModel } from "../models/navigation-schema.js";
 import { NotificationService } from "../config/fcm.js";
 import { PurchaseModel } from "../models/purchase-schema.js";
 import mongoose from "mongoose";
-import { updateFileInUseByUrl } from "./files-controller.js";
+import {
+  buildUploadFileName,
+  updateFileInUseByUrl,
+} from "./files-controller.js";
 import { UserModel } from "../models/user-schema.js";
 import redis from "../config/redis.js";
 
@@ -310,7 +313,19 @@ export const getReportedProblem = async (req: Request, res: Response) => {
             comments:1,
             createdAt: 1,
             emailSent: 1,
-            resolvedAt: 1,
+            // Tickets resolved before resolvedAt was always saved: fall back to updatedAt.
+            resolvedAt: {
+              $ifNull: [
+                "$resolvedAt",
+                {
+                  $cond: [
+                    { $eq: ["$status", "RESOLVED"] },
+                    "$updatedAt",
+                    null,
+                  ],
+                },
+              ],
+            },
             resolvedBy: 1,
             type: 1,
             relevantId: 1,
@@ -454,7 +469,18 @@ export const updateReportedProblemStatus = async (
     }
     const userDetails: any = checkExist?.userId;
 
-    await ReportProblemModel.findByIdAndUpdate(id, { $set: { status } });
+    await ReportProblemModel.findByIdAndUpdate(id, {
+      $set: {
+        status,
+        ...(status === "RESOLVED"
+          ? {
+              resolvedComments: resolvedComments?.trim() || null,
+              resolvedAt: new Date(),
+              resolvedBy: adminId,
+            }
+          : {}),
+      },
+    });
     const issueTitle = `${checkExist?.courseId?.name} - ${checkExist?.type}`;
     const issueDescription = `${checkExist?.courseId?.name} - ${checkExist?.type} - ${checkExist?.comments}`;
     if (sendReportEmail && !checkExist?.emailSent && status === "RESOLVED") {
@@ -467,12 +493,7 @@ export const updateReportedProblemStatus = async (
       });
       if (result) {
         await ReportProblemModel.findByIdAndUpdate(id, {
-          $set: {
-            emailSent: true,
-            resolvedComments,
-            resolvedAt: new Date(),
-            resolvedBy: adminId,
-          },
+          $set: { emailSent: true },
         });
       }
     }
@@ -546,7 +567,7 @@ export const createUpdateCompanyInfo = async (req: Request, res: Response) => {
         url: logoUrl,
         action: "increase",
         fileCategory: "Image",
-        fileName: companyName || title || "Company Logo",
+        fileName: buildUploadFileName("Company Profile", companyName || title, "Logo"),
       });
     }
     return OK(res, {}, "Updated successfully");

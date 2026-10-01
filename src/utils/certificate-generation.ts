@@ -297,8 +297,13 @@ const drawPMIBadge = (
 
   ctx.textBaseline = "alphabetic";
 };
-export const formatDate = (date: string | Date): string => {
-  return new Date(date).toLocaleDateString("en-US", {
+export const formatDate = (date?: string | Date | null): string => {
+  // Missing/invalid dates return "" so callers can fall back, instead of
+  // printing "Invalid Date" on the certificate.
+  if (!date) return "";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("en-US", {
     month: "long",
     day: "2-digit",
     year: "numeric",

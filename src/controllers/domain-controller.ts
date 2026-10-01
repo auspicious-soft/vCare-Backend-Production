@@ -8,7 +8,11 @@ import csv from "csv-parser";
 import { Readable } from "stream";
 import mongoose from "mongoose";
 import { QuestionModel } from "../models/questions-schema.js";
-import { updateFileInUseByUrl } from "./files-controller.js";
+import {
+  buildUploadFileName,
+  getCourseNameForFile,
+  updateFileInUseByUrl,
+} from "./files-controller.js";
 import { getFileUrl } from "../helpers/index.js";
 
 const handleMCQ = async (
@@ -923,7 +927,9 @@ export const getQuestionsTasks = async (req: Request, res: Response) => {
     const questions = await QuestionModel.find({
       taskId,
       status: "ACTIVE",
-    }).populate("taskId");
+    })
+      .populate("taskId")
+      .lean();
 
     return OK(
       res,
@@ -1112,11 +1118,21 @@ export const addTaskQuestion = async (req: Request, res: Response) => {
        CREATE FLOW
     ====================================================== */
     if (payload.image) {
+      const domain: any = await DomainModel.findById(checkTask.domainId)
+        .select("domain")
+        .lean();
       await updateFileInUseByUrl({
         url: image,
         action: "increase",
         fileCategory: "Image",
-        fileName: "Question",
+        courseId,
+        fileName: buildUploadFileName(
+          "Domains and Tasks",
+          await getCourseNameForFile(courseId),
+          typeof domain?.domain === "string" ? domain.domain : "",
+          [checkTask.taskLabel, checkTask.taskName].filter(Boolean).join(" "),
+          question,
+        ),
       });
     }
     const questionDoc = await QuestionModel.create(payload);

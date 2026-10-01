@@ -5,10 +5,24 @@ import csv from "csv-parser";
 import { Readable } from "stream";
 import { CheckCourseExist } from "../utils/helpers.js";
 import mongoose from "mongoose";
-import { updateFileInUseByUrl } from "./files-controller.js";
+import {
+  buildUploadFileName,
+  getCourseNameForFile,
+  updateFileInUseByUrl,
+} from "./files-controller.js";
 import { validate } from "node-cron";
 import { getFileUrl } from "../helpers/index.js";
 import { PracticeExamModel } from "../models/practice-exam-schema.js";
+
+// e.g. "Questions › PMP › Practice › People › Which of the following…"
+const getQuestionImageFileName = async (question: any) =>
+  buildUploadFileName(
+    "Questions",
+    await getCourseNameForFile(question?.courseId),
+    question?.isPractice ? "Practice" : "Exam",
+    question?.domainName,
+    question?.question,
+  );
 
 const escapeRegex = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -396,7 +410,8 @@ export const addSimpleQuestion = async (req: Request, res: Response) => {
         url: payload.image,
         action: "increase",
         fileCategory: "Image",
-        fileName: "Question",
+        courseId: question.courseId,
+        fileName: await getQuestionImageFileName(question),
       });
     }
     return OK(res, question, "Question added successfully");
@@ -443,7 +458,8 @@ export const updateQuestion = async (req: Request, res: Response) => {
         url: payload.image,
         action: "increase",
         fileCategory: "Image",
-        fileName: "Question",
+        courseId: question.courseId,
+        fileName: await getQuestionImageFileName(question),
       });
     }
     await question.save();

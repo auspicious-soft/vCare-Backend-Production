@@ -97,6 +97,7 @@ startReminderAndUpdateCronJob();
 notificationAnnouncementCron();
 notificationGarbageCollectionCron();
 updateExpiredSubscriptions();
+// reminderEmailTestCron();
 app.get("/", (_, res: any) => {
 	res.send("Hello world entry point 🚀✅");
 });

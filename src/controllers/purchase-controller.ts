@@ -225,6 +225,17 @@ export const createCheckoutSessionService = async (req: any, res: Response) => {
                   ? productDetails?.categoryName
                   : undefined;
 
+      // Shown in the payment-failed email, which only has Stripe metadata to go on.
+      const coursePlanLabel = [checkPlan?.courseName, checkPlan?.planName]
+        .filter(Boolean)
+        .join(" - ");
+      const subscriptionDisplayName =
+        purchaseType === "COURSE"
+          ? coursePlanLabel
+            ? `the course ${coursePlanLabel}`
+            : ""
+          : productDisplayName || productName || "";
+
       if (checkPlan && purchaseType === "COURSE") {
         // ✅ Fixed Stripe price for course plans
         lineItem = {
@@ -264,6 +275,15 @@ export const createCheckoutSessionService = async (req: any, res: Response) => {
 
           line_items: [lineItem],
           allow_promotion_codes: true,
+          // Session metadata is not copied to the PaymentIntent, so the
+          // payment_intent.payment_failed webhook needs its own copy.
+          payment_intent_data: {
+            metadata: {
+              userId,
+              planId: checkPlan?._id?.toString() || "",
+              planName: subscriptionDisplayName,
+            },
+          },
           success_url: success_url
             ? success_url
             : `${process.env.FRONTEND_URL}/payment-success`,
@@ -284,6 +304,7 @@ export const createCheckoutSessionService = async (req: any, res: Response) => {
                 : null,
             endDate: endDate?.endDateISO || "",
             planId: checkPlan?._id?.toString() || "",
+            planName: subscriptionDisplayName,
             success_url:
               success_url || `${process.env.FRONTEND_URL}/payment-success`,
             cancel_url:
@@ -313,6 +334,24 @@ export const createCheckoutSessionService = async (req: any, res: Response) => {
     }
     return INTERNAL_SERVER_ERROR(res, "Internal Server Error");
   }
+};
+
+const getFailedPaymentPlanName = async (
+  metadata: Stripe.Metadata | null | undefined,
+  planId?: any,
+): Promise<string | undefined> => {
+  const metadataName = metadata?.planName?.trim();
+  if (metadataName && !metadataName.includes("undefined")) return metadataName;
+
+  const resolvedPlanId = planId?._id ?? planId ?? metadata?.planId;
+  if (!resolvedPlanId || !mongoose.Types.ObjectId.isValid(String(resolvedPlanId))) {
+    return undefined;
+  }
+  const plan = await PlanModel.findById(resolvedPlanId)
+    .select("courseName planName")
+    .lean();
+  const label = [plan?.courseName, plan?.planName].filter(Boolean).join(" - ");
+  return label ? `the course ${label}` : undefined;
 };
 
 export const afterSubscriptionCreatedService = async (
@@ -418,7 +457,15 @@ export const afterSubscriptionCreatedService = async (
         .populate("planId", "planName")
         .lean();
 
-      const failedUser = failedPurchase?.userId as any;
+      // Purchases are only created on success, so usually there is no record here.
+      const metadataUserId = paymentIntent.metadata?.userId;
+      const failedUser =
+        (failedPurchase?.userId as any) ||
+        (metadataUserId && mongoose.Types.ObjectId.isValid(metadataUserId)
+          ? await UserModel.findById(metadataUserId)
+              .select("fullName firstname lastname email")
+              .lean()
+          : null);
       const fullName =
         failedUser?.fullName ||
         `${failedUser?.firstname || ""} ${failedUser?.lastname || ""}`.trim() ||
@@ -426,17 +473,10 @@ export const afterSubscriptionCreatedService = async (
         paymentIntent.metadata?.userName ||
         "User";
 
-      const planName =
-        (failedPurchase?.planId as any)?.planName ||
-        paymentIntent.metadata?.planName ||
-        (failedPurchase?.planId
-          ? (
-              await PlanModel.findById(failedPurchase.planId)
-                .select("planName")
-                .lean()
-            )?.planName
-          : undefined) ||
-        undefined;
+      const planName = await getFailedPaymentPlanName(
+        paymentIntent.metadata,
+        failedPurchase?.planId,
+      );
 
       if (failedUser?.email) {
         const amountValue =
@@ -524,13 +564,7 @@ export const afterSubscriptionCreatedService = async (
           ? (session.amount_total / 100).toFixed(2)
           : undefined;
       const currency = session.currency?.toUpperCase();
-      const planData = session.metadata?.planId
-        ? await PlanModel.findById(session.metadata.planId)
-            .select("planName")
-            .lean()
-        : null;
-      const planName =
-        planData?.planName || session.metadata?.planName || undefined;
+      const planName = await getFailedPaymentPlanName(session.metadata);
 
       if (failedEmail) {
         await sendPaymentFailedEmail({

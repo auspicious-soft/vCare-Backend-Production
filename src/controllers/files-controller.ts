@@ -7,6 +7,7 @@ import { promisify } from "util";
 import { createRequire } from "module";
 import multer from "multer";
 import sharp from "sharp";
+import { Types } from "mongoose";
 import {
   BADREQUEST,
   CREATED,
@@ -296,13 +297,60 @@ export const deleteFiles = async (req: Request, res: Response) => {
   }
 };
 
+const FILE_NAME_PART_MAX_LENGTH = 60;
+
+// Builds a descriptive name like "Flash Cards › PMP › Agile Basics › Card 3 › Front Image"
+// so admins can tell on /upload-files where each file was uploaded.
+export const buildUploadFileName = (
+  ...parts: Array<string | number | null | undefined>
+) =>
+  parts
+    .map((part) =>
+      String(part ?? "")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter(Boolean)
+    .map((part) =>
+      part.length > FILE_NAME_PART_MAX_LENGTH
+        ? `${part.slice(0, FILE_NAME_PART_MAX_LENGTH - 1).trim()}…`
+        : part,
+    )
+    .join(" › ");
+
+export const getCourseNameForFile = async (
+  courseId?: string | Types.ObjectId | null,
+) => {
+  if (!courseId || !Types.ObjectId.isValid(String(courseId))) return "";
+  const course = await CourseModel.findById(courseId).select("name").lean();
+  return course?.name ?? "";
+};
+
+// Names auto-generated before files were labelled by page/section; these get
+// replaced with a descriptive name the next time the file is saved somewhere.
+const LEGACY_GENERIC_FILE_NAMES = new Set([
+  "Course Intro Asset",
+  "Flashcard Front Image",
+  "Flashcard Back Image",
+  "Question",
+  "Lesson File",
+  "Course Image",
+  "Company Logo",
+  "Image Asset",
+  "Video Asset",
+  "File Asset",
+]);
+
 export const updateFileInUseByUrl = async (req: {
   url: string;
   action: "increase" | "decrease";
   fileCategory?: string;
   fileName?: string;
+  courseId?: string | Types.ObjectId | null | undefined;
 }) => {
-  const { url, action, fileCategory, fileName } = req;
+  const { url, action, fileCategory, fileName, courseId } = req;
   if (!url) {
     throw new Error("url is required");
   }
@@ -330,6 +378,19 @@ export const updateFileInUseByUrl = async (req: {
   if (action === "increase") {
     if (existingFile) {
       existingFile.inUse = (existingFile.inUse || 0) + 1;
+      if (
+        fileName?.trim() &&
+        LEGACY_GENERIC_FILE_NAMES.has(existingFile.fileName ?? "")
+      ) {
+        existingFile.fileName = fileName.trim();
+      }
+      if (
+        !existingFile.courseId &&
+        courseId &&
+        Types.ObjectId.isValid(String(courseId))
+      ) {
+        existingFile.courseId = new Types.ObjectId(String(courseId));
+      }
       await existingFile.save();
       return existingFile;
     }
@@ -339,6 +400,9 @@ export const updateFileInUseByUrl = async (req: {
       fileCategory: derivedCategory,
       fileName: derivedFileName,
       inUse: 1,
+      ...(courseId && Types.ObjectId.isValid(String(courseId))
+        ? { courseId }
+        : {}),
     });
     return createdFile;
   }

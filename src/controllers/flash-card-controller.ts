@@ -15,7 +15,36 @@ import { FlashCardModel } from "../models/flash-card-schema.js";
 import csv from "csv-parser";
 import { Readable } from "stream";
 import mongoose from "mongoose";
-import { updateFileInUseByUrl } from "./files-controller.js";
+import {
+  buildUploadFileName,
+  updateFileInUseByUrl,
+} from "./files-controller.js";
+
+// Course + category context used to label flashcard images on /upload-files.
+const getFlashcardFileContext = async (
+  categoryId: string | mongoose.Types.ObjectId,
+) => {
+  const category: any = await FlashCardCategoryModel.findById(categoryId)
+    .select("categoryName courseId")
+    .populate({ path: "courseId", select: "name" })
+    .lean();
+  const course = category?.courseId;
+
+  return {
+    courseId: course?._id ?? course ?? null,
+    getFileName: (
+      card: { frontText?: string | null; order?: number | null },
+      side: "Front Image" | "Back Image",
+    ) =>
+      buildUploadFileName(
+        "Flash Cards",
+        course?.name,
+        category?.categoryName,
+        card.frontText || (card.order ? `Card ${card.order}` : "Card"),
+        side,
+      ),
+  };
+};
 
 const getNextFlashcardCategoryOrder = async (
   courseId: string | mongoose.Types.ObjectId,
@@ -399,20 +428,26 @@ export const createFlashcard = async (req: Request, res: Response) => {
       backText,
       backImage: backImageUrl,
     });
-    if (backImageUrl) {
+    const fileContext =
+      backImageUrl || frontImageUrl
+        ? await getFlashcardFileContext(categoryId)
+        : null;
+    if (backImageUrl && fileContext) {
       await updateFileInUseByUrl({
         url: backImageUrl,
         action: "increase",
         fileCategory: "Image",
-        fileName: "Flashcard Back Image",
+        courseId: fileContext.courseId,
+        fileName: fileContext.getFileName(data, "Back Image"),
       });
     }
-    if (frontImageUrl) {
+    if (frontImageUrl && fileContext) {
       await updateFileInUseByUrl({
         url: frontImageUrl,
         action: "increase",
         fileCategory: "Image",
-        fileName: "Flashcard Front Image",
+        courseId: fileContext.courseId,
+        fileName: fileContext.getFileName(data, "Front Image"),
       });
     }
     return OK(res, data, "Created successfully");
@@ -553,6 +588,7 @@ export const bulkUploadFlashcards = async (req: Request, res: Response) => {
     });
 
     const created = await FlashCardModel.insertMany(flashcards);
+    const fileContext = await getFlashcardFileContext(categoryId);
 
     await Promise.all(
       created.flatMap((card) => {
@@ -563,7 +599,8 @@ export const bulkUploadFlashcards = async (req: Request, res: Response) => {
               url: card.frontImage,
               action: "increase",
               fileCategory: "Image",
-              fileName: "Flashcard Front Image",
+              courseId: fileContext.courseId,
+              fileName: fileContext.getFileName(card, "Front Image"),
             }),
           );
         }
@@ -573,7 +610,8 @@ export const bulkUploadFlashcards = async (req: Request, res: Response) => {
               url: card.backImage,
               action: "increase",
               fileCategory: "Image",
-              fileName:  "Flashcard Back Image",
+              courseId: fileContext.courseId,
+              fileName: fileContext.getFileName(card, "Back Image"),
             }),
           );
         }
@@ -678,6 +716,12 @@ export const updateFlashcard = async (req: Request, res: Response) => {
 
     const hasFrontImageChanged = frontImageUrl !== existingFlashcard.frontImage;
     const hasBackImageChanged = backImageUrl !== existingFlashcard.backImage;
+    const fileContext =
+      (hasFrontImageChanged && frontImageUrl) ||
+      (hasBackImageChanged && backImageUrl)
+        ? await getFlashcardFileContext(targetCategoryId)
+        : null;
+    const cardForFileName = updatedData ?? existingFlashcard;
 
     if (hasFrontImageChanged) {
       if (existingFlashcard.frontImage) {
@@ -688,12 +732,13 @@ export const updateFlashcard = async (req: Request, res: Response) => {
           fileName:  "Flashcard Front Image",
         });
       }
-      if (frontImageUrl) {
+      if (frontImageUrl && fileContext) {
         await updateFileInUseByUrl({
           url: frontImageUrl,
           action: "increase",
           fileCategory: "Image",
-          fileName: "Flashcard Front Image",
+          courseId: fileContext.courseId,
+          fileName: fileContext.getFileName(cardForFileName, "Front Image"),
         });
       }
     }
@@ -706,12 +751,13 @@ export const updateFlashcard = async (req: Request, res: Response) => {
           fileName: "Flashcard Back Image",
         });
       }
-      if (backImageUrl) {
+      if (backImageUrl && fileContext) {
         await updateFileInUseByUrl({
           url: backImageUrl,
           action: "increase",
           fileCategory: "Image",
-          fileName:"Flashcard Back Image",
+          courseId: fileContext.courseId,
+          fileName: fileContext.getFileName(cardForFileName, "Back Image"),
         });
       }
     }

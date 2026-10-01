@@ -319,9 +319,11 @@ export const userHome = async (req: Request, res: Response) => {
         .limit(10)
         .lean(),
 
+      // In-progress (STARTED) attempts are not shown in recent activities.
       MockExamResultModel.find({
         userId,
         status: "ACTIVE",
+        currentStatus: { $in: ["COMPLETED", "PAUSED"] },
       })
         .populate({
           path: "mockExamId",
@@ -720,14 +722,23 @@ export const userHome = async (req: Request, res: Response) => {
     });
 
     courseExamData.forEach((item: any) => {
+      // Only a submitted exam has a score/report; paused attempts are shown
+      // by status without a score.
+      const isCompleted = item.currentStatus === "COMPLETED";
+      const examName = item.mockExamId?.name;
+      const message = isCompleted
+        ? `Attempted mock exam "${examName}" and scored ${item.overallPercentage}%`
+        : `Paused mock exam "${examName}"`;
+
       activities.push({
         _id: item._id,
         currentStatus: item.currentStatus,
         type: "MOCK_EXAM",
-        message: `Attempted mock exam "${item.mockExamId?.name}" and scored ${item.overallPercentage}%`,
-        score: item.overallPercentage,
-        correct: item.correct,
-        incorrect: item.incorrect,
+        message,
+        reportId: isCompleted ? item._id : null,
+        score: isCompleted ? item.overallPercentage : null,
+        correct: isCompleted ? item.correct : null,
+        incorrect: isCompleted ? item.incorrect : null,
         examId: item.mockExamId?._id,
         courseName: item.mockExamId?.courseId?.name,
         createdAt: item.createdAt,
@@ -2803,7 +2814,7 @@ export const getUserMockExam = async (req: Request, res: Response) => {
         courseId: new mongoose.Types.ObjectId(id),
         status: "ACTIVE",
       })
-        .select("order courseId name numberOfQuestions timeInMin price")
+        .select("order courseId name numberOfQuestions timeInMin price instructions")
         .lean(),
 
       PurchaseModel.find({
@@ -2836,8 +2847,16 @@ export const getUserMockExam = async (req: Request, res: Response) => {
             _id: "$mockExamId",
             latestAttempt: { $first: "$$ROOT" },
             totalAttempts: { $sum: 1 },
+            // Only submitted attempts have a score; $avg skips the nulls
+            // produced for paused / in-progress attempts.
             averageCorrectPercentage: {
-              $avg: { $ifNull: ["$overallPercentage", 0] },
+              $avg: {
+                $cond: [
+                  { $eq: ["$currentStatus", "COMPLETED"] },
+                  { $ifNull: ["$overallPercentage", 0] },
+                  null,
+                ],
+              },
             },
           },
         },
@@ -3278,7 +3297,7 @@ export const getUserMockExamQuestions = async (req: Request, res: Response) => {
       examData = await MockExamResultModel.findById(id)
         .populate({
           path: "mockExamId",
-          select: "numberOfQuestions timeInMin syllabus courseId isRandom",
+          select: "numberOfQuestions timeInMin syllabus courseId isRandom instructions",
         })
         .lean();
 
@@ -3291,8 +3310,14 @@ export const getUserMockExamQuestions = async (req: Request, res: Response) => {
 
     const baseExam = isResultMode ? examData.mockExamId : examData;
 
-    const { numberOfQuestions, timeInMin, syllabus, courseId, isRandom } =
-      baseExam;
+    const {
+      numberOfQuestions,
+      timeInMin,
+      syllabus,
+      courseId,
+      isRandom,
+      instructions = "",
+    } = baseExam;
     const courseObjectId = new mongoose.Types.ObjectId(courseId);
     const allowedDomains = new Set(
       (Array.isArray(syllabus) ? syllabus : [])
@@ -3463,6 +3488,7 @@ export const getUserMockExamQuestions = async (req: Request, res: Response) => {
           timeInMin: previousAttempt.availableTime,
           timeTaken: previousAttempt.timeTaken,
           examId: previousAttempt._id,
+          instructions,
           totalQuestions: formattedQuestions.length,
           questions: formattedQuestions,
         },
@@ -3651,6 +3677,7 @@ export const getUserMockExamQuestions = async (req: Request, res: Response) => {
         lastQuestionId: null,
         timeInMin,
         examId: newExam._id,
+        instructions,
         totalQuestions: formattedQuestions.length,
         questions: formattedQuestions,
       },
@@ -3779,13 +3806,52 @@ export const getAllMockExamsResult = async (req: Request, res: Response) => {
 export const getMockExamResultBoard = async (req: Request, res: Response) => {
   try {
     const { examId, timeTaken } = req.query;
+    const userId = (req as any).user.id;
+
+    const mainTable = await MockExamResultModel.findById(examId).lean();
+    if (!mainTable || String(mainTable.userId) !== String(userId)) {
+      return BADREQUEST(res, "No result found");
+    }
+
+    // Only a running attempt can be submitted. A paused attempt must be resumed
+    // first, so no report/score is ever generated for an unfinished exam.
+    if (mainTable.currentStatus === "PAUSED") {
+      return BADREQUEST(
+        res,
+        "This exam is paused. Resume and submit it to see the report.",
+      );
+    }
+
+    // Already submitted: return the saved result instead of re-scoring it
+    // (avoids overwriting the score/completedAt and issuing duplicate certificates).
+    if (mainTable.currentStatus === "COMPLETED") {
+      const completedExam: any = await MockExamModel.findById(
+        mainTable.mockExamId,
+      )
+        .select("remarks")
+        .lean();
+      return OK(
+        res,
+        {
+          correct: mainTable.correct,
+          incorrect: mainTable.incorrect,
+          unanswered: mainTable.unanswered,
+          remarks: mainTable.remarks || null,
+          overallPercentage: mainTable.overallPercentage,
+          timeTaken: mainTable.timeTaken,
+          scoreBreakDown: mainTable.scoreBreakDown,
+          remarksArr: completedExam?.remarks,
+          _id: mainTable._id,
+        },
+        "Result fetched successfully",
+      );
+    }
+
     const results: any = await MockExamQuestionModel.find({
       examId,
     })
       .populate("questionId")
       .sort({ createdAt: 1 });
-
-    const mainTable = await MockExamResultModel.findById(examId).lean();
 
     if (!results.length) {
       return BADREQUEST(res, "No result found");
@@ -3878,19 +3944,28 @@ export const getMockExamResultBoard = async (req: Request, res: Response) => {
       remarksArr: examData?.remarks,
     };
 
-    const result = await MockExamResultModel.findByIdAndUpdate(examId, {
-      $set: {
-        currentStatus: "COMPLETED",
-        correct,
-        incorrect,
-        unanswered,
-        remarks: remarks?.remarks,
-        overallPercentage,
-        timeTaken: timeTaken,
-        scoreBreakDown: domainMap,
-        completedAt: new Date(),
+    const result = await MockExamResultModel.findOneAndUpdate(
+      { _id: examId, currentStatus: "STARTED" },
+      {
+        $set: {
+          currentStatus: "COMPLETED",
+          correct,
+          incorrect,
+          unanswered,
+          remarks: remarks?.remarks,
+          overallPercentage,
+          timeTaken: timeTaken,
+          scoreBreakDown: domainMap,
+          completedAt: new Date(),
+        },
       },
-    });
+    );
+    if (!result) {
+      return BADREQUEST(
+        res,
+        "This exam is paused. Resume and submit it to see the report.",
+      );
+    }
     await createIssuingCertificate(
       {
         userId: mainTable?.userId,
@@ -5377,14 +5452,23 @@ export const getUserById = async (req: Request, res: Response) => {
 
       /* ---------- 📝 Mock Exam Activities ---------- */
       examData.forEach((item: any) => {
+        const isCompleted = item.currentStatus === "COMPLETED";
+        const examName = item.mockExamId?.name;
+        const message = isCompleted
+          ? `Attempted mock exam "${examName}" and scored ${item.overallPercentage}%`
+          : item.currentStatus === "PAUSED"
+            ? `Paused mock exam "${examName}"`
+            : `Started mock exam "${examName}" (not submitted)`;
+
         activities.push({
           _id: item._id,
           currentStatus: item.currentStatus,
           type: "MOCK_EXAM",
-          message: `Attempted mock exam "${item.mockExamId?.name}" and scored ${item.overallPercentage}%`,
-          score: item.overallPercentage,
-          correct: item.correct,
-          incorrect: item.incorrect,
+          message,
+          reportId: isCompleted ? item._id : null,
+          score: isCompleted ? item.overallPercentage : null,
+          correct: isCompleted ? item.correct : null,
+          incorrect: isCompleted ? item.incorrect : null,
           examId: item.mockExamId?._id,
           courseName: item.mockExamId?.courseId?.name,
           createdAt: item.createdAt,

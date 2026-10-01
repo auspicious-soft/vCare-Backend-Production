@@ -11,7 +11,10 @@ import { AdminModel } from "../models/admin-schema.js";
 import { CourseModel } from "../models/course-schema.js";
 import { Parser } from "json2csv";
 import { getS3Url } from "../utils/helpers.js";
-import { updateFileInUseByUrl } from "./files-controller.js";
+import {
+  buildUploadFileName,
+  updateFileInUseByUrl,
+} from "./files-controller.js";
 import { getFileUrl } from "../helpers/index.js";
 
 const normalizeString = (value: unknown): string | undefined => {
@@ -347,7 +350,7 @@ export const createCertificateTemplate = async (req: Request, res: Response) => 
 				url: imageUrl,
 				action: "increase",
 				fileCategory: "Image",
-				fileName: saved.templateName,
+				fileName: buildUploadFileName("Certificates/PDUs", "Templates", saved.templateName),
 			});
 		}
 		return res.status(201).json({ success: true, data: saved });
@@ -548,7 +551,7 @@ export const updateCertificateTemplate = async (req: Request, res: Response) => 
 					url: imageUrl,
 					action: "increase",
 					fileCategory: "Image",
-					fileName: existing.templateName,
+					fileName: buildUploadFileName("Certificates/PDUs", "Templates", existing.templateName),
 				});
 			}
 		}
@@ -724,10 +727,14 @@ export const generateCertificateFromRequest = async (req: Request, res: Response
 
 		const courseNameFromCourseId = template?.defaults?.courseId ? normalizeString((await CourseModel.findById(template.defaults.courseId).select("name").lean())?.name) : undefined;
 
+		// The date printed on the certificate is the date the admin issues it.
+		const issuedAt = new Date();
+
 		const result = await generateCertificate(template, {
 			...runtimeData,
 			name: participantName || "Participant Name",
 			courseName: courseNameFromCourseId || normalizeString(runtimeData.courseName) || normalizeString(template?.defaults?.courseName),
+			completionDate: issuedAt.toISOString().split("T")[0],
 		});
 
 		const { pngBuffer, pdfBuffer } = result;
@@ -746,7 +753,7 @@ export const generateCertificateFromRequest = async (req: Request, res: Response
 					certificatePng,
 					certificatePdf,
 					status: "ISSUED",
-					issuedAt: new Date(),
+					issuedAt,
 					templateId: template._id,
 				},
 				$setOnInsert: {
@@ -898,22 +905,24 @@ export const generateCertificateFromModal = async (req: Request, res: Response) 
 export const createIssuingCertificate = async (req: any, res: Response) => {
 	try {
 		let { courseId, userId, moduleType, moduleTypeId, completedAt } = req;
-		const exisitingDetails = await IssueCertificateModel.findOne({
-			courseId,
-			userId,
-			moduleType,
-			moduleTypeId,
-		});
-		if (exisitingDetails) {
-			return;
-		}
-		const certificateEntry = await IssueCertificateModel.create({
-			courseId,
-			userId,
-			moduleType,
-			moduleTypeId,
-			completedAt,
-		});
+
+		// One certificate per user, per course, per module type. For mock exams this
+		// means one certificate for the course however many attempts are completed;
+		// the first completed attempt is kept as moduleTypeId. Upsert keeps this
+		// atomic so parallel submissions can't create duplicates.
+		await IssueCertificateModel.findOneAndUpdate(
+			{ courseId, userId, moduleType },
+			{
+				$setOnInsert: {
+					courseId,
+					userId,
+					moduleType,
+					...(moduleTypeId ? { moduleTypeId } : {}),
+					completedAt,
+				},
+			},
+			{ upsert: true, new: true },
+		);
 
 		return;
 	} catch (err: any) {

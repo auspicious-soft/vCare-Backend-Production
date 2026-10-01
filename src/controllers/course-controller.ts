@@ -4,7 +4,10 @@ import { CourseModel } from "../models/course-schema.js";
 // import redis from "../config/redis.js";
 import { CourseIntroModel } from "../models/course-intro-schema.js";
 import { createPlansDirectlyToStripe, updatePlans } from "./plan-controller.js";
-import { updateFileInUseByUrl } from "./files-controller.js";
+import {
+  buildUploadFileName,
+  updateFileInUseByUrl,
+} from "./files-controller.js";
 import { getFileUrl } from "../helpers/index.js";
 
 export const createCourse = async (req: Request, res: Response) => {
@@ -54,7 +57,7 @@ export const createCourse = async (req: Request, res: Response) => {
       hasCertificates,
     });
     if(image) {
-      await updateFileInUseByUrl({ url: image, action: "increase", fileCategory: "Image", fileName: name });
+      await updateFileInUseByUrl({ url: image, action: "increase", fileCategory: "Image", courseId: data._id, fileName: buildUploadFileName("Courses", name, "Course Image") });
     }
     await createPlansDirectlyToStripe({ courseName: name, courseId: data._id }, res);
     // await redis.del("COURSES:ACTIVE");
@@ -130,7 +133,7 @@ export const updateCourse = async (req: Request, res: Response) => {
       if (oldData?.image) {
         await updateFileInUseByUrl({ url: oldData.image, action: "decrease", fileCategory: "Image", fileName: oldData.name || "Course Image" });
       }
-      await updateFileInUseByUrl({ url: image, action: "increase", fileCategory: "Image", fileName: name || oldData?.name || "Course Image" });
+      await updateFileInUseByUrl({ url: image, action: "increase", fileCategory: "Image", courseId: id, fileName: buildUploadFileName("Courses", name || oldData?.name, "Course Image") });
     }
     const newData = await CourseModel.findByIdAndUpdate(
       id,
@@ -265,16 +268,28 @@ export const createUpdateIntro = async (req: Request, res: Response) => {
       { upsert: true, new: true, runValidators: true },
     );
 
-    const uploadFileUrls = Array.isArray(req.body?.uploadFiles?.files)
-      ? req.body.uploadFiles.files
-          .map((file: { url?: string }) => file?.url)
-          .filter((url: unknown): url is string => typeof url === "string" && !!url.trim())
+    const uploadFiles = Array.isArray(req.body?.uploadFiles?.files)
+      ? req.body.uploadFiles.files.filter(
+          (file: { url?: string }) =>
+            typeof file?.url === "string" && !!file.url.trim(),
+        )
       : [];
 
-    if (uploadFileUrls.length > 0) {
+    if (uploadFiles.length > 0) {
+      const course = await CourseModel.findById(id).select("name").lean();
       await Promise.all(
-        uploadFileUrls.map((url: string) =>
-          updateFileInUseByUrl({ url, action: "increase", fileCategory: "File", fileName: "Course Intro Asset" }),
+        uploadFiles.map((file: { url: string; nameOfFile?: string }, index: number) =>
+          updateFileInUseByUrl({
+            url: file.url,
+            action: "increase",
+            courseId: String(id),
+            fileName: buildUploadFileName(
+              "Course Introduction",
+              course?.name,
+              req.body?.uploadFiles?.title || "Upload Files",
+              file.nameOfFile || `File ${index + 1}`,
+            ),
+          }),
         ),
       );
     }

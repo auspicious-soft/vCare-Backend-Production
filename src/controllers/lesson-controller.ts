@@ -7,8 +7,27 @@ import fs from "fs";
 import { Readable } from "stream";
 import mongoose from "mongoose";
 import { QuestionModel } from "../models/questions-schema.js";
-import { updateFileInUseByUrl } from "./files-controller.js";
+import {
+  buildUploadFileName,
+  getCourseNameForFile,
+  updateFileInUseByUrl,
+} from "./files-controller.js";
 import { getFileUrl } from "../helpers/index.js";
+
+// e.g. "Learning Hub › PMP › Module 1 › Lesson 2" (lesson files)
+// or   "Learning Hub › PMP › Module 1 › Question › Which of…" (question images)
+const getLearningHubFileName = async (
+  courseId: any,
+  moduleName: any,
+  ...rest: Array<string | null | undefined>
+) =>
+  buildUploadFileName(
+    "Learning Hub",
+    await getCourseNameForFile(courseId),
+    moduleName ? String(moduleName) : "",
+    ...rest,
+  );
+
 export const createModule = async (req: Request, res: Response) => {
   try {
     const {
@@ -43,7 +62,12 @@ export const createModule = async (req: Request, res: Response) => {
             url: lesson.fileLink,
             action: "increase",
             fileCategory: "File",
-            fileName: lesson.lessonName || module,
+            courseId,
+            fileName: await getLearningHubFileName(
+              courseId,
+              module,
+              lesson.lessonName,
+            ),
           });
         }
       });
@@ -541,11 +565,20 @@ export const updateLesson = async (req: Request, res: Response) => {
         fileCategory: "File",
         fileName: currentLesson.lessonName || module,
       });
+      const lessonModule = await LessonModel.findById(moduleDoc._id)
+        .select("courseId")
+        .session(session)
+        .lean();
       await updateFileInUseByUrl({
         url: fileLink,
         action: "increase",
         fileCategory: "File",
-        fileName: lessonName || currentLesson.lessonName || module,
+        courseId: lessonModule?.courseId,
+        fileName: await getLearningHubFileName(
+          lessonModule?.courseId,
+          module,
+          lessonName || currentLesson.lessonName,
+        ),
       });
     }
 
@@ -625,15 +658,20 @@ export const addLesson = async (req: Request, res: Response) => {
     const existingLessons = checkModule.lessons.map(
       (lesson: any) => lesson.fileLink,
     );
-    const newLessons = lessons.map((lesson: any) => lesson.fileLink);
+    const newLessons = lessons.filter((lesson: any) => lesson?.fileLink);
 
     await Promise.all([
-      ...newLessons.map((newLesson: string) =>
+      ...newLessons.map(async (newLesson: any) =>
         updateFileInUseByUrl({
-          url: newLesson,
+          url: newLesson.fileLink,
           action: "increase",
           fileCategory: "File",
-          fileName: "Lesson File",
+          courseId: checkModule.courseId,
+          fileName: await getLearningHubFileName(
+            checkModule.courseId,
+            checkModule.module,
+            newLesson.lessonName,
+          ),
         }),
       ),
       ...existingLessons.map((existingLesson: string) =>
@@ -879,7 +917,13 @@ export const addQuestion = async (req: Request, res: Response) => {
         url: image,
         action: "increase",
         fileCategory: "Image",
-        fileName: "Question",
+        courseId,
+        fileName: await getLearningHubFileName(
+          courseId,
+          checkModule.module,
+          "Question",
+          question,
+        ),
       });
     }
     return OK(res, questionDoc, "Question added successfully");
@@ -938,11 +982,22 @@ export const updateQuestionsLessons = async (req: Request, res: Response) => {
           fileName: checkExisting.question,
         });
       }
+      const lessonModule = checkExisting.lessonId
+        ? await LessonModel.findById(checkExisting.lessonId)
+            .select("module")
+            .lean()
+        : null;
       await updateFileInUseByUrl({
         url: req.body.image,
         action: "increase",
         fileCategory: "Image",
-        fileName: "Question",
+        courseId: checkExisting.courseId,
+        fileName: await getLearningHubFileName(
+          checkExisting.courseId,
+          lessonModule?.module,
+          "Question",
+          questions?.question ?? checkExisting.question,
+        ),
       });
     }
     return OK(res, questions, "Question fetched successfully");

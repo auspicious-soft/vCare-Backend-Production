@@ -43,7 +43,8 @@ export const dashboard = async (req: Request, res: Response) => {
     /* ✅ EXAM PIPELINE (LAST 10) */
     /* -------------------------------------------------- */
     const examDataPipeline: any = [
-      { $match: { status: "ACTIVE" } },
+      // $ne: null also excludes documents where timeTaken is missing.
+      { $match: { status: "ACTIVE", timeTaken: { $ne: null } } },
       { $sort: { updatedAt: -1 } },
       { $limit: 10 },
 
