@@ -27,6 +27,7 @@ import {
   resendOTPMail,
   sendEmailVerificationMail,
   sendEnquiryEmail,
+  sendSubscriptionEmail,
   sendPasswordResetEmail,
   sendWelcomeUserEmail,
 } from "../utils/mail-helper.js";
@@ -1013,6 +1014,26 @@ export const submitEnquiry = async (req: Request, res: Response) => {
     });
 
     return OK(res, {}, "Enquiry submitted successfully");
+  } catch (err: any) {
+    return BADREQUEST(res, err.message || "Something went wrong");
+  }
+};
+
+export const submitSubscription = async (req: Request, res: Response) => {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+
+    if (!email) {
+      return BADREQUEST(res, "Email is required");
+    }
+
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return BADREQUEST(res, "Please enter a valid email address");
+    }
+
+    await sendSubscriptionEmail(email);
+
+    return OK(res, {}, "Subscribed successfully");
   } catch (err: any) {
     return BADREQUEST(res, err.message || "Something went wrong");
   }

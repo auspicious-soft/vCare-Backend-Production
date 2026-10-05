@@ -13,6 +13,7 @@ import {
   userLogin,
   verifyOTP,
   submitEnquiry,
+  submitSubscription,
 } from "../controllers/auth-controller.js";
 import { getPlatformInfo } from "../controllers/user-controller.js";
 import { enquiryRateLimiter } from "../utils/helpers.js";
@@ -45,6 +46,7 @@ authRoutes.post(
   uploadMultiCSV,
   submitEnquiry,
 );
+authRoutes.post("/public/subscribe", enquiryRateLimiter, submitSubscription);
 
 
 

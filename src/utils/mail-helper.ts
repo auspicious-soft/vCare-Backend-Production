@@ -517,3 +517,24 @@ export const sendEnquiryEmail = async ({
     attachments,
   });
 };
+
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
+
+export const sendSubscriptionEmail = async (email: string) => {
+  const result = await resend.emails.send({
+    from: process.env.COMPANY_RESEND_GMAIL_ACCOUNT!,
+    to: ["support@vcareprojectmanagement.com"],
+    subject: "User subscription",
+    replyTo: email,
+    text: `A user has subscribed to the newsletter.\n\nEmail: ${email}`,
+    html: `<p>A user has subscribed to the newsletter.</p><p><strong>Email:</strong> ${escapeHtml(email)}</p>`,
+  });
+
+  if (!result || result.error) {
+    console.error("Failed to send subscription email:", result?.error);
+    throw new Error("Failed to submit subscription");
+  }
+
+  return result;
+};
