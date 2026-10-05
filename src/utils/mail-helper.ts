@@ -275,13 +275,13 @@ export const sendLoginCredentials = async (email: string, password: string, name
   }
 };
 
-export const sendEmailVerificationMail = async (email: string, otp: string) => {
+export const sendEmailVerificationMail = async (email: string, otp: string, fullName?: string) => {
   try {
     const result = await resend.emails.send({
       from: process.env.COMPANY_RESEND_GMAIL_ACCOUNT as string,
       to: email,
       subject: "vCare Project Management Verification Code",
-      react: await VerifyEmail({ otp }),
+      react: await VerifyEmail({ otp, ...(fullName ? { fullName } : {}) }),
     });
 
     if (!result || result.error) {
@@ -300,6 +300,7 @@ export const resendOTPMail = async (
   email: string | null | undefined,
   otp: string,
   purpose: "LOGIN" | "FORGOT_PASSWORD" | "VERIFY_EMAIL",
+  fullName?: string,
 ) => {
   try {
     if (!email) {
@@ -309,7 +310,7 @@ export const resendOTPMail = async (
       from: process.env.COMPANY_RESEND_GMAIL_ACCOUNT as string,
       to: email,
       subject: "vCare Project Management Verification Code",
-      react: await ResendOTPEmail({ otp, purpose }),
+      react: await ResendOTPEmail({ otp, purpose, ...(fullName ? { fullName } : {}) }),
     });
 
     if (!result || result.error) {

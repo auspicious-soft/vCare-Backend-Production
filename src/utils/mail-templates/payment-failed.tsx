@@ -25,7 +25,7 @@ const PaymentFailedEmail: React.FC<Readonly<PaymentFailedEmailProps>> = ({
         <Text>We were unable to process your recent payment for your order.</Text>
         {subscriptionName ? (
           <Text>
-            <strong>Plan:</strong> {subscriptionName}
+            <strong>Order:</strong> {subscriptionName}
           </Text>
         ) : null}
         {paymentAmount ? (

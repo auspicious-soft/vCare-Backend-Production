@@ -205,7 +205,7 @@ export const createUserAccount = async (req: Request, res: Response) => {
     });
 
     //todo send otp via email service
-    await sendEmailVerificationMail(email, otp);
+    await sendEmailVerificationMail(email, otp, newUser.fullName);
 
     const verificationToken = jwt.sign(
       {
@@ -704,17 +704,20 @@ export const resendOtp = async (req: Request, res: Response) => {
         ? { adminId: verifyResetToken.id }
         : { userId: verifyResetToken.id }),
     });
+    let fullName;
     if (userType === "ADMIN") {
       const user = await AdminModel.findById(verifyResetToken.id);
       email = user?.email;
+      fullName = user?.fullName;
     } else {
       const user = await UserModel.findById(verifyResetToken.id);
       email = user?.email;
+      fullName = user?.fullName;
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     //todo send otp via email service
-    await resendOTPMail(email, otp, verifyResetToken.purpose);
+    await resendOTPMail(email, otp, verifyResetToken.purpose, fullName);
     await OTPModel.create({
       adminId: userType === "ADMIN" ? verifyResetToken.id : undefined,
       userId: userType === "USER" ? verifyResetToken.id : undefined,
