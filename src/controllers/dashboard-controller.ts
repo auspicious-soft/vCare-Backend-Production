@@ -44,7 +44,7 @@ export const dashboard = async (req: Request, res: Response) => {
     /* -------------------------------------------------- */
     const examDataPipeline: any = [
       // $ne: null also excludes documents where timeTaken is missing.
-      { $match: { status: "ACTIVE", timeTaken: { $ne: null } } },
+      { $match: { status: "ACTIVE",currentStatus: { $in: ["COMPLETED"] }, timeTaken: { $ne: null } } },
       { $sort: { updatedAt: -1 } },
       { $limit: 10 },
 
