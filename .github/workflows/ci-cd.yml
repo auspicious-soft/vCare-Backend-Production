@@ -117,6 +117,7 @@ jobs:
               -e NODE_ENV='${{ secrets.NODE_ENV }}' \
               -e STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
               -e FRONTEND_URL='${{ secrets.FRONTEND_URL }}' \
+              -e EXPIRY_FRONTEND_URL='${{ secrets.EXPIRY_FRONTEND_URL }}' \
               -e MODE='${{ secrets.MODE }}' \
               ${{ secrets.DOCKER_USERNAME }}/v-care-backend-live:latest || { echo 'Docker run failed'; exit 1; }
 
