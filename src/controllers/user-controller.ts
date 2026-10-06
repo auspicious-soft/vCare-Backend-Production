@@ -5044,6 +5044,7 @@ export const getUserById = async (req: Request, res: Response) => {
       {
         $match: {
           status: "ACTIVE",
+          currentStatus:{ $in: ["COMPLETED", "PAUSED"] },
           userId: new mongoose.Types.ObjectId(userId), // ✅ filter specific user
         },
       },

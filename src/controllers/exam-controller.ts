@@ -835,6 +835,7 @@ export const getUserMockExamData = async (req: Request, res: Response) => {
 
     const matchStage: any = {
       status: "ACTIVE",
+      currentStatus: { $in: ["COMPLETED", "PAUSED"] },
     };
     const sortStage: any = {};
     switch (sort) {
