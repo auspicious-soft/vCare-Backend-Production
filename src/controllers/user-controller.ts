@@ -759,8 +759,8 @@ export const userHome = async (req: Request, res: Response) => {
           message: `Scheduled an exam for`,
           scheduledFor: item.examScheduledAt,
           courseName: item.courseId?.name,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
+          createdAt: item.examScheduledOn ?? item.createdAt,
+          updatedAt: item.examScheduledOn ?? item.updatedAt,
           userDetails: {
             ...item.userId,
             image: item?.userId?.image
@@ -775,8 +775,8 @@ export const userHome = async (req: Request, res: Response) => {
           type: "QUESTION_OF_DAY",
           message: `Attempted Question of the Day`,
           questionId: item.questionOfTheDay?._id,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
+          createdAt: item.questionAttemptedAt ?? item.createdAt,
+          updatedAt: item.questionAttemptedAt ?? item.updatedAt,
           userDetails: item.userId,
         });
       }
@@ -920,6 +920,7 @@ export const scheduleExam = async (req: Request, res: Response) => {
         $set: {
           examScheduled: true,
           examScheduledAt: examDate,
+          examScheduledOn: new Date(),
         },
         $setOnInsert: {
           userId,
@@ -964,6 +965,7 @@ export const attemptQuestionOfTheDay = async (req: Request, res: Response) => {
       {
         $set: {
           isQuestionOfTheDayAttempted: true,
+          questionAttemptedAt: new Date(),
           // ❌ DO NOT TOUCH questionUpdatedAt here
         },
       },
@@ -5485,8 +5487,8 @@ export const getUserById = async (req: Request, res: Response) => {
             type: "EXAM_SCHEDULED",
             message: `Scheduled an exam for ${new Date(item.examScheduledAt).toLocaleString()}`,
             courseName: item.courseId?.name,
-            createdAt: item.createdAt,
-            updatedAt: item.updatedAt,
+            createdAt: item.examScheduledOn ?? item.createdAt,
+            updatedAt: item.examScheduledOn ?? item.updatedAt,
             userDetails: item.userId,
           });
         }
@@ -5496,8 +5498,8 @@ export const getUserById = async (req: Request, res: Response) => {
             type: "QUESTION_OF_DAY",
             message: `Attempted Question of the Day`,
             questionId: item.questionOfTheDay?._id,
-            createdAt: item.createdAt,
-            updatedAt: item.updatedAt,
+            createdAt: item.questionAttemptedAt ?? item.createdAt,
+            updatedAt: item.questionAttemptedAt ?? item.updatedAt,
             userDetails: item.userId,
           });
         }

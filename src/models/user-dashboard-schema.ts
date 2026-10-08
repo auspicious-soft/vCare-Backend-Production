@@ -8,6 +8,8 @@ export interface IUserDashboard extends Document {
   questionOfTheDay: Types.ObjectId;
   isQuestionOfTheDayAttempted: Boolean;
   questionUpdatedAt: Date;
+  examScheduledOn: Date;
+  questionAttemptedAt: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -39,6 +41,16 @@ const userDashboardSchema = new Schema<IUserDashboard>(
       default: null,
     },
     questionUpdatedAt: {
+      type: Date,
+      default: null,
+    },
+    // When the user scheduled the exam (updatedAt changes on every dashboard load)
+    examScheduledOn: {
+      type: Date,
+      default: null,
+    },
+    // When the user last attempted the question of the day
+    questionAttemptedAt: {
       type: Date,
       default: null,
     },

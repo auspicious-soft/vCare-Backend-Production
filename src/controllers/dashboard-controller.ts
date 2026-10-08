@@ -155,7 +155,13 @@ export const dashboard = async (req: Request, res: Response) => {
     /* -------------------------------------------------- */
     /* ✅ FETCH DATA */
     /* -------------------------------------------------- */
-    const [progressData, examData, dashboardData, last10examUpdates] =
+    const [
+      progressData,
+      examData,
+      examScheduledData,
+      questionAttemptedData,
+      last10examUpdates,
+    ] =
       await Promise.all([
         ProgressModel.find({})
           .sort({ updatedAt: -1 })
@@ -178,11 +184,19 @@ export const dashboard = async (req: Request, res: Response) => {
           .populate("userId", "fullName image")
           .lean(),
 
-        UserDashboardModel.find({})
-          .sort({ updatedAt: -1 })
+        // updatedAt changes on every dashboard load, so sort by the action's own time
+        UserDashboardModel.find({
+          examScheduled: true,
+          examScheduledOn: { $ne: null },
+        })
+          .sort({ examScheduledOn: -1 })
           .limit(15)
-          .populate("courseId", "name")
-          .populate("questionOfTheDay")
+          .populate("userId", "fullName image")
+          .lean(),
+
+        UserDashboardModel.find({ questionAttemptedAt: { $ne: null } })
+          .sort({ questionAttemptedAt: -1 })
+          .limit(15)
           .populate("userId", "fullName image")
           .lean(),
 
@@ -228,26 +242,24 @@ export const dashboard = async (req: Request, res: Response) => {
       });
     });
 
-    dashboardData.forEach((item: any) => {
-      if (item.examScheduled && item.examScheduledAt) {
-        activities.push({
-          type: "EXAM_SCHEDULED",
-          userName: item.userId?.fullName,
-          image: getFileUrl(item.userId?.image),
-          message: `${item.userId?.fullName} scheduled an exam`,
-          updatedAt: item.updatedAt,
-        });
-      }
+    examScheduledData.forEach((item: any) => {
+      activities.push({
+        type: "EXAM_SCHEDULED",
+        userName: item.userId?.fullName,
+        image: getFileUrl(item.userId?.image),
+        message: `${item.userId?.fullName} scheduled an exam`,
+        updatedAt: item.examScheduledOn,
+      });
+    });
 
-      if (item.isQuestionOfTheDayAttempted) {
-        activities.push({
-          type: "QUESTION_OF_DAY",
-          userName: item.userId?.fullName,
-          image: getFileUrl(item.userId?.image),
-          message: `${item.userId?.fullName} attempted question of the day`,
-          updatedAt: item.updatedAt,
-        });
-      }
+    questionAttemptedData.forEach((item: any) => {
+      activities.push({
+        type: "QUESTION_OF_DAY",
+        userName: item.userId?.fullName,
+        image: getFileUrl(item.userId?.image),
+        message: `${item.userId?.fullName} attempted question of the day`,
+        updatedAt: item.questionAttemptedAt,
+      });
     });
 
     activities.sort(
