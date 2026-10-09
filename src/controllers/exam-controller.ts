@@ -163,54 +163,65 @@ export const updateMockExam = async (req: Request, res: Response) => {
       status: { $ne: "DELETED" },
     })) as any;
 
-    const normalizedSyllabus = syllabus.map((item: any) => ({
+    if (!mockExam) {
+      return BADREQUEST(res, "Mock Exam not found");
+    }
+
+    // Partial updates (e.g. only status) may omit syllabus, so fall back to the saved values.
+    const normalizedSyllabus = (
+      Array.isArray(syllabus) ? syllabus : mockExam.syllabus ?? []
+    ).map((item: any) => ({
       domain: String(item.domain ?? "").trim(),
       percentage: Number(item.percentage),
     }));
 
-    const requiredPerDomain = normalizedSyllabus.map((item: any) => ({
-      domain: item.domain,
-      requiredQuestions: Math.ceil((numberOfQuestions * item.percentage) / 100),
-    }));
+    // Only re-check question availability when the question mix changes.
+    if (syllabus !== undefined || numberOfQuestions !== undefined) {
+      const effectiveNumberOfQuestions = Number(
+        numberOfQuestions ?? mockExam.numberOfQuestions,
+      );
+      const requiredPerDomain = normalizedSyllabus.map((item: any) => ({
+        domain: item.domain,
+        requiredQuestions: Math.ceil(
+          (effectiveNumberOfQuestions * item.percentage) / 100,
+        ),
+      }));
 
-    console.log("courseId: ", courseId);
-    const availableQuestions = await QuestionModel.aggregate([
-      {
-        $match: {
-          courseId: new mongoose.Types.ObjectId(courseId),
-          status: "ACTIVE",
-          domainName: {
-            $in: normalizedSyllabus.map((x: any) => x.domain),
+      const availableQuestions = await QuestionModel.aggregate([
+        {
+          $match: {
+            courseId: new mongoose.Types.ObjectId(
+              String(courseId ?? mockExam.courseId),
+            ),
+            status: "ACTIVE",
+            domainName: {
+              $in: normalizedSyllabus.map((x: any) => x.domain),
+            },
           },
         },
-      },
-      {
-        $group: {
-          _id: "$domainName",
-          count: { $sum: 1 },
+        {
+          $group: {
+            _id: "$domainName",
+            count: { $sum: 1 },
+          },
         },
-      },
-    ]);
+      ]);
 
-    const availableMap = new Map(
-      availableQuestions.map((x) => [String(x._id).trim(), x.count]),
-    );
-
-    const insufficientDomains = requiredPerDomain.filter((item: any) => {
-      const available = availableMap.get(item.domain) || 0;
-      console.log("available: ", available);
-      return available < item.requiredQuestions;
-    });
-
-    if (insufficientDomains.length) {
-      return BADREQUEST(
-        res,
-        `Insufficient questions for domains:\n${insufficientDomains.map((item: any) => `${item.domain}: Required ${item.requiredQuestions}, Available ${availableMap.get(item.domain) || 0}`).join("\n")}`,
+      const availableMap = new Map(
+        availableQuestions.map((x) => [String(x._id).trim(), x.count]),
       );
-    }
 
-    if (!mockExam) {
-      return BADREQUEST(res, "Mock Exam not found");
+      const insufficientDomains = requiredPerDomain.filter((item: any) => {
+        const available = availableMap.get(item.domain) || 0;
+        return available < item.requiredQuestions;
+      });
+
+      if (insufficientDomains.length) {
+        return BADREQUEST(
+          res,
+          `Insufficient questions for domains:\n${insufficientDomains.map((item: any) => `${item.domain}: Required ${item.requiredQuestions}, Available ${availableMap.get(item.domain) || 0}`).join("\n")}`,
+        );
+      }
     }
 
     const remainingSeconds = Number(timeInMin) * 60;
