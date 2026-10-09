@@ -5046,7 +5046,7 @@ export const getUserById = async (req: Request, res: Response) => {
       {
         $match: {
           status: "ACTIVE",
-          currentStatus:{ $in: ["COMPLETED"] },
+          currentStatus: { $in: ["COMPLETED", "PAUSED"] },
           userId: new mongoose.Types.ObjectId(userId), // ✅ filter specific user
         },
       },
@@ -5153,7 +5153,7 @@ export const getUserById = async (req: Request, res: Response) => {
           overallPercentage: 1,
           timeTaken: 1,
           exam: {
-            _id: "$exam _id",
+            _id: "$exam._id",
             name: "$exam.name",
             remarks: "$exam.remarks",
           },
@@ -5161,6 +5161,7 @@ export const getUserById = async (req: Request, res: Response) => {
           examName: "$exam.name",
           courseName: "$course.name",
           completedAt: 1,
+          updatedAt: 1,
           domainSummary: 1,
         },
       },
@@ -5552,11 +5553,11 @@ export const getUserById = async (req: Request, res: Response) => {
       const [userData, recentExams, progressData] = await Promise.all([
         UserModel.findById(userId).lean(),
 
-        // ✅ Last 5 exams
+        // ✅ Last 5 exams (completed + paused)
         MockExamResultModel.find({
           userId: objectUserId,
           status: "ACTIVE",
-          currentStatus: "COMPLETED",
+          currentStatus: { $in: ["COMPLETED", "PAUSED"] },
         })
           .sort({ createdAt: -1 })
           .limit(5)
@@ -5595,6 +5596,9 @@ export const getUserById = async (req: Request, res: Response) => {
       /* ✅ FORMAT RECENT EXAMS */
       /* -------------------------------------------------- */
       const formattedExams = recentExams.map((item: any) => ({
+        _id: item?._id,
+        currentStatus: item?.currentStatus,
+        attemptNumber: item?.attemptNumber || 1,
         examName: item?.mockExamId?.name || null,
         courseName: item?.mockExamId?.courseId?.name || null,
         score: item?.overallPercentage || 0,
