@@ -9,6 +9,7 @@ export interface IUserDashboard extends Document {
   isQuestionOfTheDayAttempted: Boolean;
   questionUpdatedAt: Date;
   examScheduledOn: Date;
+  examScheduledTimeZone?: string | null;
   questionAttemptedAt: Date;
   createdAt?: Date;
   updatedAt?: Date;
@@ -47,6 +48,11 @@ const userDashboardSchema = new Schema<IUserDashboard>(
     // When the user scheduled the exam (updatedAt changes on every dashboard load)
     examScheduledOn: {
       type: Date,
+      default: null,
+    },
+    // IANA time zone the user picked the exam date in (e.g. "Australia/Sydney")
+    examScheduledTimeZone: {
+      type: String,
       default: null,
     },
     // When the user last attempted the question of the day

@@ -44,7 +44,7 @@ import { AdminModel } from "../models/admin-schema.js";
 import { PlanModel } from "../models/plans-schema.js";
 import { DateTime } from "luxon";
 import { NotificationModel } from "../models/notification-schema.js";
-import { fromZonedTime } from "date-fns-tz";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { customAlphabet } from "nanoid";
 import { Readable } from "stream";
 import csvParser from "csv-parser";
@@ -911,6 +911,29 @@ export const adminUpdateUser = async (req: Request, res: Response) => {
   }
 };
 
+// The exam date is stored as midnight in the user's time zone, so it must be
+// shown in that zone, not the server's. Older records have no saved zone:
+// shifting by 12h before reading the UTC date gives the picked day for
+// zones between UTC-12 and UTC+11.
+const formatScheduledExamDate = (
+  scheduledAt: Date | string,
+  timeZone?: string | null,
+): string => {
+  const date = new Date(scheduledAt);
+  if (timeZone) {
+    try {
+      return formatInTimeZone(date, timeZone, "dd-MM-yyyy");
+    } catch {
+      // Invalid zone string; fall through to the UTC estimate.
+    }
+  }
+  return formatInTimeZone(
+    new Date(date.getTime() + 12 * 60 * 60 * 1000),
+    "UTC",
+    "dd-MM-yyyy",
+  );
+};
+
 export const scheduleExam = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?._id;
@@ -930,6 +953,7 @@ export const scheduleExam = async (req: Request, res: Response) => {
           examScheduled: true,
           examScheduledAt: examDate,
           examScheduledOn: new Date(),
+          examScheduledTimeZone: timeZone,
         },
         $setOnInsert: {
           userId,
@@ -5495,7 +5519,10 @@ export const getUserById = async (req: Request, res: Response) => {
         if (item.examScheduled && item.examScheduledAt) {
           activities.push({
             type: "EXAM_SCHEDULED",
-            message: `Scheduled an exam for ${new Date(item.examScheduledAt).toLocaleString()}`,
+            message: `Scheduled an exam for ${formatScheduledExamDate(
+              item.examScheduledAt,
+              item.examScheduledTimeZone,
+            )}`,
             courseName: item.courseId?.name,
             createdAt: item.examScheduledOn ?? item.createdAt,
             updatedAt: item.examScheduledOn ?? item.updatedAt,
