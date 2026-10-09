@@ -6560,7 +6560,7 @@ export const getNotificationsUser = async (req: Request, res: Response) => {
 
     // ✅ Build dynamic filter
     const filter: any = {
-      // courseId,
+      courseId: new mongoose.Types.ObjectId(courseId as string),
       isSent: true,
     };
 
