@@ -405,7 +405,8 @@ export const userHome = async (req: Request, res: Response) => {
 
       /* -------- PURCHASES -------- */
 
-      PurchaseModel.findOne({
+      // Only a purchase for this course (directly or via its plan) counts as its subscription.
+      PurchaseModel.find({
         userId,
         status: "SUCCESS",
         $or: [
@@ -415,7 +416,15 @@ export const userHome = async (req: Request, res: Response) => {
       })
         .sort({ purchaseAmount: -1 })
         .populate("planId")
-        .lean() as any,
+        .lean()
+        .then(
+          (purchases: any[]) =>
+            purchases.find(
+              (purchase: any) =>
+                purchase.purchasedProduct?.toString() === id.toString() ||
+                purchase.planId?.courseId?.toString() === id.toString(),
+            ) || null,
+        ) as any,
 
       PurchaseModel.find({
         userId,
