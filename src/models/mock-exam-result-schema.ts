@@ -25,6 +25,7 @@ const mockExamResultSchema = new Schema<IMockExamResult>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "user",
+      index: true,
     },
     attemptNumber: {
       type: Number,
@@ -33,6 +34,7 @@ const mockExamResultSchema = new Schema<IMockExamResult>(
     mockExamId: {
       type: Schema.Types.ObjectId,
       ref: "mockexam",
+      index: true,
     },
     lastQuestionId: {
       type: Schema.Types.ObjectId,

@@ -21,6 +21,7 @@ const mockExamQuestionSchema = new Schema<IMockExamQuestion>(
     examId: {
       type: Schema.Types.ObjectId,
       ref: "mockexamresult",
+      index: true,
     },
     questionId: {
       type: Schema.Types.ObjectId,

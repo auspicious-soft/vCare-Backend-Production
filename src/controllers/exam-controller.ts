@@ -886,65 +886,29 @@ export const getUserMockExamData = async (req: Request, res: Response) => {
           }
         : {};
 
-    const pipeline: any = [
-      { $match: matchStage },
+    // Filter by course up front (uses the mockExamId index) instead of a
+    // per-row $expr lookup.
+    const courseExamIds = await MockExamModel.find({
+      courseId: new mongoose.Types.ObjectId(courseId),
+    }).distinct("_id");
+    matchStage.mockExamId = { $in: courseExamIds };
 
-      // ✅ Join user
-      {
-        $lookup: {
-          from: "users",
-          localField: "userId",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      { $unwind: "$user" },
-
-      // ✅ Join mock exam WITH course filter
-      {
-        $lookup: {
-          from: "mockexams",
-          let: { examId: "$mockExamId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$_id", "$$examId"] },
-                    {
-                      $eq: ["$courseId", new mongoose.Types.ObjectId(courseId)],
-                    },
-                  ],
-                },
-              },
-            },
-          ],
-          as: "exam",
-        },
-      },
-      { $unwind: "$exam" },
-
-      // 🔍 Apply search AFTER lookup
-      { $match: searchMatch },
-
-      // ✅ Domain-wise performance summary
+    // Domain-wise performance summary — expensive, so it runs only for the
+    // rows on the requested page.
+    const domainSummaryStages = [
       {
         $lookup: {
           from: "mockexamquestions",
-          let: { resultId: "$_id" },
+          localField: "_id",
+          foreignField: "examId",
           pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ["$examId", "$$resultId"] },
-              },
-            },
-
             // 🔗 Join questions to get domain
             {
               $lookup: {
                 from: "questions",
                 localField: "questionId",
                 foreignField: "_id",
+                pipeline: [{ $project: { domainName: 1 } }],
                 as: "question",
               },
             },
@@ -984,45 +948,73 @@ export const getUserMockExamData = async (req: Request, res: Response) => {
           as: "domainSummary",
         },
       },
+    ];
 
-      // ✅ Final projection
+    const pipeline: any = [
+      { $match: matchStage },
+
+      // ✅ Join user
       {
-        $project: {
-          _id: 1,
-          score: 1,
-          attemptNumber: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          currentStatus: 1,
-          correct: 1,
-          incorrect: 1,
-          unanswered: 1,
-          remarks: 1,
-          overallPercentage: 1,
-          timeTaken: 1,
-
-          "user.fullName": 1,
-
-          "exam.name": 1,
-          "exam.remarks": 1,
-
-          domainSummary: 1, // ✅ NEW FIELD
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          pipeline: [{ $project: { fullName: 1 } }],
+          as: "user",
         },
       },
+      { $unwind: "$user" },
+
+      // ✅ Join mock exam
+      {
+        $lookup: {
+          from: "mockexams",
+          localField: "mockExamId",
+          foreignField: "_id",
+          pipeline: [{ $project: { name: 1, remarks: 1 } }],
+          as: "exam",
+        },
+      },
+      { $unwind: "$exam" },
+
+      // 🔍 Apply search AFTER lookup
+      { $match: searchMatch },
 
       {
         $sort: sortStage,
       },
-      // {
-      // 	$sort: {
-      // 		updatedAt: -1,
-      // 	},
-      // },
 
-      // ✅ Pagination
+      // ✅ Pagination, then the domain summary for this page only
       {
         $facet: {
-          data: [{ $skip: skip }, { $limit: pageSize }],
+          data: [
+            { $skip: skip },
+            { $limit: pageSize },
+            ...domainSummaryStages,
+            {
+              $project: {
+                _id: 1,
+                score: 1,
+                attemptNumber: 1,
+                createdAt: 1,
+                updatedAt: 1,
+                currentStatus: 1,
+                correct: 1,
+                incorrect: 1,
+                unanswered: 1,
+                remarks: 1,
+                overallPercentage: 1,
+                timeTaken: 1,
+
+                "user.fullName": 1,
+
+                "exam.name": 1,
+                "exam.remarks": 1,
+
+                domainSummary: 1,
+              },
+            },
+          ],
           totalCount: [{ $count: "count" }],
         },
       },
