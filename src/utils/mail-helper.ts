@@ -26,6 +26,7 @@ export const sendContactMailToAdmin = async (payload: {
   subject: string;
   adminEmail: string;
   pageUrl?: string;
+  sourceLabel?: string;
 }) => {
   try {
     const now = new Date();
@@ -53,6 +54,7 @@ export const sendContactMailToAdmin = async (payload: {
         subject: payload.subject,
         message: payload.message,
         ...(payload.pageUrl ? { pageUrl: payload.pageUrl } : {}),
+        ...(payload.sourceLabel ? { sourceLabel: payload.sourceLabel } : {}),
       }),
     });
 

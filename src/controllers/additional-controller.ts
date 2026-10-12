@@ -795,6 +795,8 @@ export async function postEnquiry(req: Request, res: Response) {
       countryCode,
       subject,
       adminEmail: ownerEmail || "team@vcareprojectmanagement.com",
+      // Browsers (the user portal) send an Origin header; the mobile app does not.
+      ...(req.headers.origin ? { sourceLabel: "Course portal" } : {}),
     });
     if (result) {
       return OK(res, {}, "Message sent successfully");

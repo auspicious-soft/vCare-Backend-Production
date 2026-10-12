@@ -640,35 +640,52 @@ export const userHome = async (req: Request, res: Response) => {
       let questionId = dashboard.questionOfTheDay;
       let isAttempted = dashboard.isQuestionOfTheDayAttempted;
 
-      if (!lastUpdated || lastUpdated < today) {
+      // Only ACTIVE questions of this course can be the question of the day.
+      const assignNewQuestionOfTheDay = async () => {
         const randomQuestion = await QuestionModel.aggregate([
-          { $match: { courseId: courseObjectId } },
+          { $match: { courseId: courseObjectId, status: "ACTIVE" } },
           { $sample: { size: 1 } },
         ]);
 
         const newQuestionId = randomQuestion?.[0]?._id;
+        if (!newQuestionId) return null;
 
-        if (newQuestionId) {
-          questionId = newQuestionId;
-          isAttempted = false;
+        questionId = newQuestionId;
+        isAttempted = false;
 
-          await UserDashboardModel.updateOne(
-            { userId, courseId: id },
-            {
-              $set: {
-                questionOfTheDay: newQuestionId,
-                questionUpdatedAt: today,
-                isQuestionOfTheDayAttempted: false,
-              },
+        await UserDashboardModel.updateOne(
+          { userId, courseId: id },
+          {
+            $set: {
+              questionOfTheDay: newQuestionId,
+              questionUpdatedAt: today,
+              isQuestionOfTheDayAttempted: false,
             },
-          );
+          },
+        );
+
+        return QuestionModel.findById(newQuestionId).lean();
+      };
+
+      let questionOfTheDay: any = null;
+
+      if (!lastUpdated || lastUpdated < today) {
+        questionOfTheDay = await assignNewQuestionOfTheDay();
+      } else if (!isAttempted && questionId) {
+        questionOfTheDay = await QuestionModel.findOne({
+          _id: questionId,
+          status: "ACTIVE",
+        }).lean();
+
+        // Today's question was deactivated or deleted since it was picked.
+        if (!questionOfTheDay) {
+          questionOfTheDay = await assignNewQuestionOfTheDay();
         }
       }
 
-      const questionOfTheDay =
-        !isAttempted && questionId
-          ? await QuestionModel.findById(questionId).lean()
-          : null;
+      if (isAttempted) {
+        questionOfTheDay = null;
+      }
 
       questionOfTheDayResponse = {
         status: "ACCESSABLE",
@@ -5704,6 +5721,94 @@ export const getUserById = async (req: Request, res: Response) => {
         }
       });
 
+      /* -------------------------------------------------- */
+      /* ✅ TASK PROGRESS PER DOMAIN */
+      /* Progress rows exist only per domain, so task progress is
+         derived from the user's attempted TASK bookmarks. */
+      /* -------------------------------------------------- */
+      const progressDomainIds = Object.values(courseMap).flatMap(
+        (course: any) => course.domains.map((d: any) => d.domainId),
+      );
+
+      if (progressDomainIds.length) {
+        const tasks = await TaskModel.find({
+          domainId: { $in: progressDomainIds },
+          status: "ACTIVE",
+        })
+          .select("_id domainId taskLabel taskName order")
+          .sort({ order: 1 })
+          .lean();
+        const taskIds = tasks.map((task: any) => task._id);
+
+        const [questionCounts, attemptedCounts] = await Promise.all([
+          QuestionModel.aggregate([
+            { $match: { taskId: { $in: taskIds }, status: "ACTIVE" } },
+            { $group: { _id: "$taskId", total: { $sum: 1 } } },
+          ]),
+          BookmarkModel.aggregate([
+            {
+              $match: {
+                userId: objectUserId,
+                type: "TASK",
+                isAttempted: true,
+                taskId: { $in: taskIds },
+              },
+            },
+            { $group: { _id: "$taskId", questions: { $addToSet: "$questionId" } } },
+            { $project: { attempted: { $size: "$questions" } } },
+          ]),
+        ]);
+
+        const totalByTask = new Map(
+          questionCounts.map((row: any) => [row._id.toString(), row.total]),
+        );
+        const attemptedByTask = new Map(
+          attemptedCounts.map((row: any) => [row._id.toString(), row.attempted]),
+        );
+
+        const tasksByDomain = new Map<string, any[]>();
+        tasks.forEach((task: any) => {
+          const key = task.domainId.toString();
+          const totalQuestions = totalByTask.get(task._id.toString()) || 0;
+          const attemptedQuestions = Math.min(
+            attemptedByTask.get(task._id.toString()) || 0,
+            totalQuestions,
+          );
+          const list = tasksByDomain.get(key) ?? [];
+          list.push({
+            taskId: task._id,
+            taskLabel: task.taskLabel || null,
+            taskName: task.taskName || null,
+            totalQuestions,
+            attemptedQuestions,
+            percentage:
+              totalQuestions === 0
+                ? 0
+                : Math.round((attemptedQuestions / totalQuestions) * 100),
+          });
+          tasksByDomain.set(key, list);
+        });
+
+        Object.values(courseMap).forEach((course: any) => {
+          course.domains.forEach((domain: any) => {
+            const domainTasks = tasksByDomain.get(domain.domainId.toString()) ?? [];
+            // Only started tasks are sent; the domain % still uses all tasks.
+            domain.tasks = domainTasks.filter((t) => t.percentage > 0);
+
+            // The stored domain percentage is overwritten by whichever task was
+            // answered last, so recompute it across all of the domain's tasks.
+            const total = domainTasks.reduce((sum, t) => sum + t.totalQuestions, 0);
+            if (total > 0) {
+              const attempted = domainTasks.reduce(
+                (sum, t) => sum + t.attemptedQuestions,
+                0,
+              );
+              domain.percentage = Math.round((attempted / total) * 100);
+            }
+          });
+        });
+      }
+
       const courseProgress = Object.values(courseMap);
       const subscriptions = await PurchaseModel.find({
         userId: objectUserId,
@@ -5836,40 +5941,54 @@ export const getUserById = async (req: Request, res: Response) => {
         activeSince,
         subscriptions: deduplicatedSubscriptionResult,
       };
-      const getDailyCounts = async (Model: any, match: any = {}) => {
+      const graphDays = Math.max(1, Number(days) || 7);
+      // Days are UTC, matching $dateToString's default.
+      const graphStart = new Date();
+      graphStart.setUTCHours(0, 0, 0, 0);
+      graphStart.setUTCDate(graphStart.getUTCDate() - (graphDays - 1));
+
+      // Counts this user's events per day, using the field that records
+      // when the event actually happened.
+      const getDailyCounts = async (
+        Model: any,
+        dateField: string,
+        match: any = {},
+      ) => {
         return Model.aggregate([
           {
             $match: {
               ...match,
-              updatedAt: {
-                $gte: new Date(Date.now() - Number(days) * 24 * 60 * 60 * 1000),
-              },
-            },
-          },
-          {
-            $project: {
-              date: {
-                $dateToString: {
-                  format: "%Y-%m-%d",
-                  date: "$updatedAt",
-                },
-              },
+              userId: objectUserId,
+              [dateField]: { $gte: graphStart },
             },
           },
           {
             $group: {
-              _id: "$date",
+              _id: {
+                $dateToString: { format: "%Y-%m-%d", date: `$${dateField}` },
+              },
               count: { $sum: 1 },
             },
           },
         ]);
       };
-      const [progressStats, examStats, dashboardStats] = await Promise.all([
-        getDailyCounts(ProgressModel),
-        getDailyCounts(MockExamResultModel, { status: "ACTIVE" }),
-        getDailyCounts(UserDashboardModel, {
-          isQuestionOfTheDayAttempted: true, // avoid noise
+      const [
+        progressStats,
+        examStartedStats,
+        examCompletedStats,
+        questionOfDayStats,
+        examScheduledStats,
+      ] = await Promise.all([
+        // Lesson/domain progress keeps only its latest update.
+        getDailyCounts(ProgressModel, "updatedAt"),
+        getDailyCounts(MockExamResultModel, "createdAt", { status: "ACTIVE" }),
+        getDailyCounts(MockExamResultModel, "completedAt", {
+          status: "ACTIVE",
+          currentStatus: "COMPLETED",
         }),
+        // Dashboard updatedAt changes on every visit, so use the real event dates.
+        getDailyCounts(UserDashboardModel, "questionAttemptedAt"),
+        getDailyCounts(UserDashboardModel, "examScheduledOn"),
       ]);
       const activityMap: Record<string, number> = {};
 
@@ -5880,15 +5999,16 @@ export const getUserById = async (req: Request, res: Response) => {
       };
 
       merge(progressStats);
-      merge(examStats);
-      merge(dashboardStats);
+      merge(examStartedStats);
+      merge(examCompletedStats);
+      merge(questionOfDayStats);
+      merge(examScheduledStats);
 
       const activityGraph = [];
 
-      for (let i = Number(days); i >= 0; i--) {
-        const d = new Date();
-        d.setHours(0, 0, 0, 0);
-        d.setDate(d.getDate() - i);
+      for (let i = graphDays - 1; i >= 0; i--) {
+        const d = new Date(graphStart);
+        d.setUTCDate(d.getUTCDate() + (graphDays - 1 - i));
 
         const key = d.toISOString().split("T")[0];
 
@@ -5966,9 +6086,28 @@ export const userExamResult = async (req: Request, res: Response) => {
   try {
     const { id } = req.query;
 
-    const checkData = await MockExamResultModel.findById(id);
+    const checkData: any = await MockExamResultModel.findById(id)
+      .populate({ path: "mockExamId", select: "name remarks" })
+      .lean();
 
-    return OK(res, checkData, "Data fetched successfully");
+    if (!checkData) {
+      return BADREQUEST(res, "Exam result not found");
+    }
+
+    // Keep mockExamId as a plain id and expose the exam's remark ranges
+    // the same way the EXAMS list does (exam.remarks).
+    const examDoc = checkData.mockExamId;
+    const result = {
+      ...checkData,
+      mockExamId: examDoc?._id ?? examDoc ?? null,
+      exam: {
+        _id: examDoc?._id ?? null,
+        name: examDoc?.name ?? null,
+        remarks: examDoc?.remarks ?? [],
+      },
+    };
+
+    return OK(res, result, "Data fetched successfully");
   } catch (err: any) {
     if (err.message) {
       return BADREQUEST(res, err.message);

@@ -8,6 +8,7 @@ interface ContactAdminNotificationEmailProps {
   subject: string;
   message: string;
   pageUrl?: string;
+  sourceLabel?: string;
 }
 
 const ContactAdminNotificationEmail: React.FC<Readonly<ContactAdminNotificationEmailProps>> = ({
@@ -17,6 +18,7 @@ const ContactAdminNotificationEmail: React.FC<Readonly<ContactAdminNotificationE
   subject,
   message,
   pageUrl,
+  sourceLabel = "LMS online store",
 }) => {
   console.log('phoneNumber: ', phoneNumber);
   return (
@@ -25,7 +27,7 @@ const ContactAdminNotificationEmail: React.FC<Readonly<ContactAdminNotificationE
         <title>New Customer Message</title>
       </Head>
       <Container style={{ fontFamily: "Arial, sans-serif", lineHeight: "1.6", color: "#111827", padding: "12px" }}>
-        <Text>You received a new message from your LMS online store contact form.</Text>
+        <Text>You received a new message from your {sourceLabel} contact form.</Text>
         <Text>
           <strong>Subject:</strong> {subject}
         </Text>
