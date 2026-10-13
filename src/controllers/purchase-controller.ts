@@ -1519,11 +1519,12 @@ export const exportPurchasesCSV = async (req: Request, res: Response) => {
     /* ✅ DOWNLOAD */
     /* -------------------------------------------------- */
 
-    res.header("Content-Type", "text/csv");
+    res.header("Content-Type", "text/csv; charset=utf-8");
 
     res.attachment(`purchases-report-${Date.now()}.csv`);
 
-    return res.send(csv);
+    // BOM so Excel reads the file as UTF-8 (e.g. "∞" instead of "âˆž")
+    return res.send("\ufeff" + csv);
   } catch (err: any) {
     console.log(err);
 

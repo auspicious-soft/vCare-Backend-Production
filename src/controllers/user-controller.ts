@@ -6175,10 +6175,11 @@ export const exportUsersCSV = async (req: Request, res: Response) => {
     const csv = parser.parse(users);
 
     // ✅ Set headers for download
-    res.header("Content-Type", "text/csv");
+    res.header("Content-Type", "text/csv; charset=utf-8");
     res.attachment(`users-${Date.now()}.csv`);
 
-    return res.send(csv);
+    // BOM so Excel reads the file as UTF-8 (e.g. "∞" instead of "âˆž")
+    return res.send("\ufeff" + csv);
   } catch (err: any) {
     console.error(err);
     return INTERNAL_SERVER_ERROR(res, "Failed to export users");
@@ -6197,7 +6198,7 @@ export const importUser = async (req: Request, res: Response) => {
 
     await new Promise<void>((resolve, reject) => {
       Readable.from(fileData.buffer as any)
-        .pipe(csvParser())
+        .pipe(csvParser({ mapHeaders: ({ header }) => String(header ?? "").replace(/^\ufeff/, "") }))
         .on("data", (row) => users.push(row))
         .on("end", resolve)
         .on("error", reject);

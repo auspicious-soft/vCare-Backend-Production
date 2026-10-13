@@ -559,7 +559,7 @@ export const bulkUploadFlashcards = async (req: Request, res: Response) => {
     const rows: any[] = [];
     await new Promise<void>((resolve, reject) => {
       Readable.from(req.file!.buffer)
-        .pipe(csv())
+        .pipe(csv({ mapHeaders: ({ header }) => String(header ?? "").replace(/^\ufeff/, "") }))
         .on("data", (row) => rows.push(row))
         .on("end", resolve)
         .on("error", reject);

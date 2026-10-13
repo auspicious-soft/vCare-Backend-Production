@@ -167,7 +167,7 @@ export const bulkUploadLessons = async (req: Request, res: Response) => {
 
     await new Promise<void>((resolve, reject) => {
       Readable.from(req.file!.buffer)
-        .pipe(csv())
+        .pipe(csv({ mapHeaders: ({ header }) => String(header ?? "").replace(/^\ufeff/, "") }))
         .on("data", (row) => rows.push(row))
         .on("end", resolve)
         .on("error", reject);
@@ -1462,7 +1462,7 @@ export const bulkUploadQuestions = async (req: Request, res: Response) => {
 
       await new Promise<void>((resolve, reject) => {
         Readable.from(file.buffer)
-          .pipe(csv())
+          .pipe(csv({ mapHeaders: ({ header }) => String(header ?? "").replace(/^\ufeff/, "") }))
           .on("data", (row) => rows.push(row))
           .on("end", resolve)
           .on("error", reject);

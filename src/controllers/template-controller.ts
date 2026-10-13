@@ -1130,7 +1130,8 @@ export const exportIssuedCertificatesCSV = async (req: Request, res: Response) =
 
 		res.setHeader("Content-Type", "text/csv; charset=utf-8");
 		res.setHeader("Content-Disposition", `attachment; filename="issued-certificates-${Date.now()}.csv"`);
-		return res.send(csv);
+		// BOM so Excel reads the file as UTF-8 (e.g. "∞" instead of "âˆž")
+		return res.send("\ufeff" + csv);
 	} catch (err: any) {
 		if (err.message) {
 			return BADREQUEST(res, err.message);

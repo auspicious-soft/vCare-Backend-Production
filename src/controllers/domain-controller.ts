@@ -314,7 +314,7 @@ export const createDomain = async (req: Request, res: Response) => {
 
         await new Promise<void>((resolve, reject) => {
           Readable.from(csvBuffer)
-            .pipe(csv())
+            .pipe(csv({ mapHeaders: ({ header }) => String(header ?? "").replace(/^\ufeff/, "") }))
             .on("data", (row) => rows.push(row))
             .on("end", resolve)
             .on("error", reject);

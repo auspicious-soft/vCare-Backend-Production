@@ -491,7 +491,7 @@ export const createPracticeExam = async (req: Request, res: Response) => {
 
       await new Promise<void>((resolve, reject) => {
         Readable.from(file!.buffer)
-          .pipe(csv())
+          .pipe(csv({ mapHeaders: ({ header }) => String(header ?? "").replace(/^\ufeff/, "") }))
           .on("data", (row) => rows.push(row))
           .on("end", resolve)
           .on("error", reject);
@@ -555,7 +555,7 @@ export const editPracticeExam = async (req: Request, res: Response) => {
 
         await new Promise<void>((resolve, reject) => {
           Readable.from(file!.buffer)
-            .pipe(csv())
+            .pipe(csv({ mapHeaders: ({ header }) => String(header ?? "").replace(/^\ufeff/, "") }))
             .on("data", (row) => rows.push(row))
             .on("end", resolve)
             .on("error", reject);
@@ -1210,9 +1210,10 @@ export const downloadUserMockExamData = async (req: Request, res: Response) => {
     const csv = parser.parse(formattedData);
 
     // ✅ Send as file
-    res.header("Content-Type", "text/csv");
+    res.header("Content-Type", "text/csv; charset=utf-8");
     res.attachment("mock_exam_results.csv");
-    return res.send(csv);
+    // BOM so Excel reads the file as UTF-8 (e.g. "∞" instead of "âˆž")
+    return res.send("\ufeff" + csv);
   } catch (err: any) {
     console.error(err);
     return INTERNAL_SERVER_ERROR(res, "Internal Server Error");
