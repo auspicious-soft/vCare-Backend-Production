@@ -22,5 +22,5 @@ export const access = {
   SUBSCRIPTION_PURCHASED: { value: "SUBSCRIPTION_PURCHASED", url: "/subscriptions" },
   MOCK_EXAM: { value: "MOCK_EXAM", url: "/mock-exam-results" },
   TICKETS: { value: "TICKETS", url: "/reported-problems" },
-  USER_NAVIGATION: { value: "USER_NAVIGATION", url: "/navigations" },
+  USER_NAVIGATION: { value: "USER_NAVIGATION", url: "/navigations"},
 };
